@@ -1,0 +1,10 @@
+{
+  "id": "paper-desk",
+  "name": "Paper Desk",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "A quiet clock for the top of a note and a pomodoro timer for the sidebar. Both stay out of the way.",
+  "author": "yunmin311",
+  "authorUrl": "https://github.com/yunmin311",
+  "isDesktopOnly": false
+}

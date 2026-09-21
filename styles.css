@@ -1,0 +1,256 @@
+/* ============================================================
+   Paper Desk（案头）— styles
+
+   两条准则，从上一轮的设计讨论里定下来的：
+   1. 颜色一律取主题变量（含 color-mix 混色）；只有【几何】是硬编码的。
+      几何与主题无关，写死才对；颜色若写死，别人换个深色主题就看不见。
+   2. 装饰只出现在时钟这一处。像素只做冒号、手写只做一条线 ——
+      两者都不许再出现第二次，否则页面会从「一枚印章」变成「贴纸册」。
+
+   所有类名前缀固定 .pd-
+   ============================================================ */
+
+/* ============================ 时钟 ============================ */
+
+.pd-clock {
+  /* 唯一的几何刻度来源：改这一个值，数字、方块、下划线按比例全部跟着走。 */
+  --pd-clock-size: 3.5rem; /* = 56px */
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  /* 上大下小。刻意不对称 —— 上下等距会让它读作「居中的一块内容」，
+     上方留得多才有「落在纸上」的重量，这是它成为锚点的来源。 */
+  padding: 5rem 0 3rem;
+
+  /* 墨色。
+     不用纯黑：纸上的墨是带色调的，纯黑会像屏幕上贴的一块。
+     也不能硬编码：#2A3B45 这种浅色墨在深色主题下直接看不见。
+     混一点用户自己的主色，深浅两套主题与换主题都自动成立。 */
+  color: color-mix(in srgb, var(--text-normal) 92%, var(--interactive-accent) 8%);
+}
+
+.pd-clock-time {
+  display: flex;
+  align-items: baseline;
+  font-family: var(--font-monospace);
+  font-size: var(--pd-clock-size);
+  line-height: 1;
+  /* 比例数字每个宽度都不同，不锁等宽的话时钟每分钟会左右抖一下。 */
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ---- 冒号 = 两个像素方块 ----
+   这里有一个必须守住的约束：方块占的宽度必须【正好等于一个等宽字符】，
+   否则数字会跟着抖。所以不放任推算 0.6em（那是 Fira Code 的比例，
+   换成别的等宽字体就不对了），而是用一个不可见的真冒号把宽度撑出来，
+   两个方块绝对定位盖上去。这样对任何等宽字体都成立。 */
+
+.pd-clock-colon {
+  position: relative;
+  display: inline-block;
+}
+
+.pd-clock-colon-ghost {
+  visibility: hidden;
+}
+
+.pd-clock-colon-dots {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--pd-clock-size) * 0.09);
+}
+
+.pd-colon-dot {
+  width: calc(var(--pd-clock-size) * 0.16); /* 56px 字号下 = 9px */
+  height: calc(var(--pd-clock-size) * 0.16);
+  background: currentColor;
+  /* steps(1, end)：每段保持起始值不变，于是正好是 1 秒亮、1 秒灭。
+     linear 会在临界处插值，看着像「渐隐了一下」。 */
+  animation: pd-blink 2s steps(1, end) infinite;
+}
+
+@keyframes pd-blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 关掉动效偏好时保持常亮 —— 闪烁是装饰，不该强加给会不适的人。 */
+@media (prefers-reduced-motion: reduce) {
+  .pd-colon-dot {
+    animation: none;
+  }
+}
+
+/* ---- 手绘横线 ---- */
+
+.pd-clock-stroke {
+  width: calc(var(--pd-clock-size) * 2.6);
+  height: 6px;
+  margin-top: calc(var(--pd-clock-size) * 0.34);
+  overflow: visible;
+}
+
+.pd-clock-stroke path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.45;
+  /* viewBox 被非等比拉伸，non-scaling-stroke 保证线宽不被一起拉歪。 */
+  vector-effect: non-scaling-stroke;
+}
+
+/* ======================= 专注计时器（侧栏） ======================= */
+
+.pd-timer {
+  padding: 1.2em 1em 1em;
+  text-align: center;
+}
+
+/* 手写体只出现在这一个地方 —— 阶段名。
+   刻意选短词：手写体在长句上可读性会塌。
+   变量留空时回落到正文字体（见 main.js 的 applyFont）。 */
+.pd-timer-phase {
+  font-family: var(--pd-handwriting, var(--font-text));
+  font-size: 1.05em;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+.pd-timer-time {
+  margin: 0.2em 0 0.5em;
+  font-family: var(--font-monospace);
+  font-size: 2.6em;
+  line-height: 1.15;
+  color: color-mix(in srgb, var(--text-normal) 92%, var(--interactive-accent) 8%);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.pd-timer-rounds {
+  margin-bottom: 0.5em;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+.pd-hidden {
+  display: none;
+}
+
+/* 状态栏里的剩余时间。
+   和时钟同一个道理：不锁等宽数字的话，每秒都会左右抖一下 ——
+   在状态栏那种细长的区域里尤其明显。 */
+.pd-statusbar {
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-timer-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.7em;
+}
+
+/* 极简按钮：无边框、无底色，只留文字。
+   侧栏本来就只有两百多像素宽，一加边框立刻变成「一个小应用」，
+   而这一页要的是「纸上写了三个字」。 */
+.pd-timer-btn {
+  padding: 0.15em 0.2em;
+  border: none;
+  background: none;
+  box-shadow: none;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.pd-timer-btn:hover {
+  background: none;
+  color: var(--text-normal);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+.pd-timer-btn:focus-visible {
+  outline: 1px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* ---- 设置页页脚 + 赞助区块（自研插件共用同一套结构与文案）---- */
+
+.pd-about {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.pd-about-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  align-items: baseline;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller, 0.9em);
+}
+
+.pd-about-meta a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.pd-about-meta a:hover {
+  text-decoration: underline;
+}
+
+.pd-about-sep {
+  opacity: 0.5;
+}
+
+.sp-box {
+  margin-top: 1em;
+  padding: 0.9em 1em;
+  border-radius: 6px;
+  background: var(--background-secondary);
+}
+
+.sp-title {
+  margin-bottom: 0.35em;
+  color: var(--text-normal);
+  font-weight: 600;
+  font-size: var(--font-ui-small, 0.95em);
+}
+
+.sp-body {
+  margin-bottom: 0.7em;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 0.9em);
+  line-height: 1.55;
+}
+
+.sp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5em;
+}
+
+.sp-row a.sp-link {
+  display: block;
+  padding: 0.15em 0;
+  color: var(--text-accent);
+  text-decoration: none;
+}
+
+.sp-row a.sp-link:hover {
+  text-decoration: underline;
+}
