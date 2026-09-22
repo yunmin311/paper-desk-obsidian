@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.3.0
+
+**Two things that were missing rather than broken: the clock could only tell time your way,
+and nobody had looked at a phone.**
+
+### The clock can be 12-hour now
+
+It read 24-hour and nothing else. That is a plain gap for anyone who reads 2:05 PM, and
+24-hour-only is the kind of default people notice daily and never mention.
+
+Two decisions worth recording, because both could have gone the other way.
+
+It **defaults to 24-hour**, keeping what the plugin has always shown. I did consider
+following the system region, which would serve English-speaking users better, but it hands
+something visible over to something invisible, and leaves no answer when someone asks why
+their clock changed. The most important property of a default is that it can be explained.
+
+The meridiem is **not translated**. It shares the clock line's monospace font, and that line
+is held together by monospace alignment — pulling in CJK would bring a second typeface and
+break it. It is a time notation, not a sentence, so it stays "AM"/"PM" in both languages. It
+is also deliberately not handwriting: this stylesheet has one rule about that, and the
+handwriting belongs to the stroke under the clock, not here.
+
+In 12-hour mode the leading zero is dropped, so 09:05 PM never appears. The cost is that the
+width changes by one character at 9:59 → 10:00, which happens exactly at the tick. Keeping it
+is better than writing a zero that should not be there.
+
+### Narrow screens
+
+Nothing here was reproducible — I cannot run Obsidian on a phone from here, and saying
+otherwise would be claiming a test I did not do. What was true is that no measurement had
+been written with a narrow screen in mind.
+
+The fix is a single variable. Every measurement in the stylesheet already derives from
+`--pd-clock-size`, so between 320 px and 560 px that one value now scales continuously with
+`clamp()` — digits, colon blocks and the drawn stroke all follow, without a breakpoint per
+rule. Desktop is untouched. The floor of 36 px is where digits stop being readable; below
+that the clock would just become body text.
+
+### A test that was not testing part of the alphabet
+
+Adding `settings.hourFormat.24` revealed that the i18n coverage test skipped keys whose last
+segment starts with a digit. Those keys were neither counted nor reported missing — a
+missing translation would have shipped as raw key text with the test passing. The regex
+allowed `[a-zA-Z]` after each dot; it now allows digits. Key count went 95 → 100 with no
+other change, which is the size of the hole.
+
+### Docs
+
+The settings tables still described the pre-0.2.1 defaults for the homepage path and
+startup-opening, both of which changed when the homepage became opt-in. Fixed.
+
 ## 0.2.1
 
 **A hotfix for 0.2.0, and it fixes a default rather than a line of logic.**

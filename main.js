@@ -112,6 +112,13 @@ const OWN = {
       "上次的计时在 Obsidian 关闭期间已经走完，已停在下一段的开头（不会替你补记）",
     "notice.notFound": "找不到这篇笔记：{path}",
 
+    "settings.clock.heading": "时钟",
+    "settings.hourFormat.name": "小时制",
+    "settings.hourFormat.desc":
+      "24 小时制读作 14:05，12 小时制读作 2:05 PM。只影响笔记里的那枚时钟 —— 计时器显示的始终是剩余时间，跟它无关。",
+    "settings.hourFormat.24": "24 小时（14:05）",
+    "settings.hourFormat.12": "12 小时（2:05 PM）",
+
     "settings.home.heading": "首页",
     "settings.homePath.name": "首页笔记的路径",
     "settings.homePath.desc":
@@ -228,6 +235,13 @@ const OWN = {
     "notice.staleTimer":
       "The last timer ran out while Obsidian was closed. It is parked at the start of the next phase rather than back-filled.",
     "notice.notFound": "No note at that path: {path}",
+
+    "settings.clock.heading": "Clock",
+    "settings.hourFormat.name": "Hour format",
+    "settings.hourFormat.desc":
+      "24-hour reads 14:05; 12-hour reads 2:05 PM. This is only for the clock in your notes — the timer always counts down and is unaffected.",
+    "settings.hourFormat.24": "24-hour (14:05)",
+    "settings.hourFormat.12": "12-hour (2:05 PM)",
 
     "settings.home.heading": "Homepage",
     "settings.homePath.name": "Path of the homepage note",
@@ -457,6 +471,14 @@ const DEFAULTS = {
   language: "auto",
   handwritingFont: DEFAULT_FONT_STACK,
 
+  /* 24 还是 12 小时制。
+
+     默认 24，理由是这个插件从第一版起一直是 24 小时：保持它，升级的人不会发现
+     笔记里那枚钟的样子变了。也认真想过做成「跟随系统地区」—— 那样美方用户体验最好，
+     但它把一件看得见的事交给一个看不见的开关；等他来问「为什么变成 12 小时了」，
+     我没有办法回答。默认值最要紧的一条性质就是可解释。 */
+  hourFormat: "24",
+
   /* ---- 首页 ----
 
      默认留空 = 首页那组行为整组关闭。这是刻意的，不是偷懒：
@@ -528,10 +550,35 @@ const TIMER_DEFAULTS = {
    判定类逻辑不接受「看起来对」—— 见仓库的 tests/logic.test.js。 */
 
 /** 当前时间的时、分，补零成两位。 */
-function splitHM(date) {
+/** 拆出时钟要显示的两个片段。
+
+    use12=false 时前导零不能省 —— "9:05" 在 24 小时制的写法里看着像漏了一位；
+    true 时反而不能有 —— "09:05 PM" 是错的，12 小时制从不补零。
+    代价是 9:59 → 10:00 那一分钟宽度会变一个字，而那一刻刚好整点刚跳、
+    且只在那一刻发生，留着它比留一个假的 0 好看。
+
+    meridiem 返回空串时，渲染层用 CSS 的 :empty 把那个标记整块拿掉，
+    所以 24 小时制下不会剩一丝空隙。（不用 class 开关是想少一处状态：
+    文字空 = 不显示，这条规则自己就说清楚了。）
+
+    "AM" / "PM" 刻意不走翻译，也不写成手绘体 ——
+    前者是因为它和数字共用这一行等宽字体：换成中文会拖入第二种字面，
+    靠等宽撑住的那条对齐就散了；后者是因为这条插件线定过规矩，
+    手写只属于时钟下方那条线。它是时间记号，不是句子。 */
+function splitHM(date, use12) {
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  const h24 = date.getHours();
+
+  if (!use12) {
+    return { hh: String(h24).padStart(2, "0"), mm, meridiem: "" };
+  }
+
+  /* 0 点读作 12（上午），12 点也读作 12（下午）—— 两端落在同一个数字上，
+     所以上午/下午只看 h24 有没有走到 12 及以后，不需要再判一次等于 12。 */
   return {
-    hh: String(date.getHours()).padStart(2, "0"),
-    mm: String(date.getMinutes()).padStart(2, "0"),
+    hh: String(h24 % 12 === 0 ? 12 : h24 % 12),
+    mm,
+    meridiem: h24 < 12 ? "AM" : "PM",
   };
 }
 
@@ -754,6 +801,11 @@ function renderClock(el) {
 
   const mm = line.createSpan({ cls: CSS_PREFIX + "clock-part", text: "--" });
 
+  /* 上下午标记总是建出来，24 小时制下它的文字是空的 ——
+     CSS 的 :empty 会把它整块拿掉。这样切换设置不用管 DOM 有没有这个节点，
+     也就不用在增 / 删两种形态之间来回重建。 */
+  const meridiem = line.createSpan({ cls: CSS_PREFIX + "clock-meridiem" });
+
   root.appendChild(buildStroke());
 
   /* 把闪烁对齐到真实秒：CSS 动画默认从元素挂载那一刻起算，
@@ -761,15 +813,16 @@ function renderClock(el) {
      用负的 animation-delay 把动画相位推到当前秒上。 */
   dots.style.animationDelay = "-" + ((Date.now() / 1000) % 2).toFixed(3) + "s";
 
-  return { hh, mm };
+  return { hh, mm, meridiem };
 }
 
 /** 时钟的渲染生命周期。
    用 MarkdownRenderChild 挂到渲染上下文上，笔记重渲染或关闭时
    onunload 会被调用 —— 定时器不会泄漏。 */
 class ClockBlock extends MarkdownRenderChild {
-  constructor(containerEl) {
+  constructor(containerEl, plugin) {
     super(containerEl);
+    this.plugin = plugin;
     this._timeout = 0;
   }
 
@@ -777,9 +830,13 @@ class ClockBlock extends MarkdownRenderChild {
     const parts = renderClock(this.containerEl);
 
     const paint = () => {
-      const hm = splitHM(new Date());
+      const settings = this.plugin && this.plugin.settings;
+      const hm = splitHM(new Date(), settings && settings.hourFormat === "12");
       parts.hh.setText(hm.hh);
       parts.mm.setText(hm.mm);
+      /* 顺手写进去，哪怕 24 小时制下是空串 —— 由文字本身决定显不显示，
+         而不是由这里判断该不该显示。 */
+      parts.meridiem.setText(hm.meridiem);
     };
 
     /* 刻意不在 1Hz 上跑：秒不需要显示，闪烁交给 CSS。
@@ -1025,6 +1082,25 @@ class PaperDeskSettingTab extends PluginSettingTab {
           s.language = value;
           await this.plugin.save();
           this.display();
+        });
+      });
+
+    /* ---- 时钟 ----
+       排在首页前面：它是这个插件里唯一不需要任何配置就能用的东西。 */
+    containerEl.createEl("h3", { text: t("settings.clock.heading") });
+
+    new Setting(containerEl)
+      .setName(t("settings.hourFormat.name"))
+      .setDesc(t("settings.hourFormat.desc"))
+      .addDropdown((drop) => {
+        drop.addOption("24", t("settings.hourFormat.24"));
+        drop.addOption("12", t("settings.hourFormat.12"));
+        drop.setValue(s.hourFormat === "12" ? "12" : "24").onChange(async (v) => {
+          s.hourFormat = v === "12" ? "12" : "24";
+          await this.plugin.save();
+          /* 改完立刻重画。时钟下一次自己刷新是在下一个整分钟，
+             要人等着看效果，看上去就像设置没生效。 */
+          this.plugin.refreshBlocks();
         });
       });
 
@@ -1339,7 +1415,7 @@ class PaperDeskPlugin extends Plugin {
        于是「插件加载了」和「内容没渲染」同时成立，看上去像渲染器坏了。
        注册先做，即使后面某一步失败，笔记里的区块仍然照常渲染。 */
     this.registerMarkdownCodeBlockProcessor(CLOCK_LANG, (source, el, ctx) => {
-      ctx.addChild(new ClockBlock(el));
+      ctx.addChild(new ClockBlock(el, this));
     });
 
     this.registerMarkdownCodeBlockProcessor(LINKS_LANG, (source, el, ctx) => {

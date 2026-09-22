@@ -46,10 +46,61 @@ function eq(label, got, want) {
   else fails.push(`${label}\n     得到 ${g}\n     期望 ${w}`);
 }
 
-/* ---------------- splitHM ---------------- */
-eq("splitHM 补零", L.splitHM(new Date(2026, 8, 21, 9, 5, 0)), { hh: "09", mm: "05" });
-eq("splitHM 午夜", L.splitHM(new Date(2026, 8, 21, 0, 0, 0)), { hh: "00", mm: "00" });
-eq("splitHM 23:59", L.splitHM(new Date(2026, 8, 21, 23, 59, 59)), { hh: "23", mm: "59" });
+/* ---------------- splitHM ----------------
+
+   这三个用例刻意保持「只传一个参数」的写法，用来钉住向后兼容：
+   不传第二参数必须是 24 小时制，否则既有笔记里的时钟会在升级后悄悄变样。
+   （事实上正是这组断言在本次改动后先变红，才证明返回结构是被测到的。） */
+eq("splitHM 补零", L.splitHM(new Date(2026, 8, 21, 9, 5, 0)), {
+  hh: "09",
+  mm: "05",
+  meridiem: "",
+});
+eq("splitHM 午夜", L.splitHM(new Date(2026, 8, 21, 0, 0, 0)), {
+  hh: "00",
+  mm: "00",
+  meridiem: "",
+});
+eq("splitHM 23:59", L.splitHM(new Date(2026, 8, 21, 23, 59, 59)), {
+  hh: "23",
+  mm: "59",
+  meridiem: "",
+});
+
+/* ---- 12 小时制 ----
+   边界是这几处：0 点与 12 点都读作 12（一个上午一个下午）、
+   11:59 还是上午而下一分钟就是下午、23:59 是最后一个下午。
+   前导零在这里必须消失 —— "09:05 PM" 是错的写法。 */
+eq("12h 午夜读作 12 AM", L.splitHM(new Date(2026, 8, 21, 0, 0, 0), true), {
+  hh: "12",
+  mm: "00",
+  meridiem: "AM",
+});
+eq("12h 上午不补零", L.splitHM(new Date(2026, 8, 21, 9, 5, 0), true), {
+  hh: "9",
+  mm: "05",
+  meridiem: "AM",
+});
+eq("12h 中午前一分钟仍是上午", L.splitHM(new Date(2026, 8, 21, 11, 59, 59), true), {
+  hh: "11",
+  mm: "59",
+  meridiem: "AM",
+});
+eq("12h 正午读作 12 PM", L.splitHM(new Date(2026, 8, 21, 12, 0, 0), true), {
+  hh: "12",
+  mm: "00",
+  meridiem: "PM",
+});
+eq("12h 下午一点", L.splitHM(new Date(2026, 8, 21, 13, 5, 0), true), {
+  hh: "1",
+  mm: "05",
+  meridiem: "PM",
+});
+eq("12h 深夜十一时", L.splitHM(new Date(2026, 8, 21, 23, 59, 59), true), {
+  hh: "11",
+  mm: "59",
+  meridiem: "PM",
+});
 
 /* ---------------- formatDuration ----------------
    这里用 ceil：起步就显示 25:00，走到 0 正好停在 00:00。

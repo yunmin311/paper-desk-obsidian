@@ -108,8 +108,9 @@ day. Lines starting with `#` are skipped, so a remark above the sentences stays 
 | Setting | Default | Notes |
 |---|---|---|
 | Interface language | Follow Obsidian | zh / en |
-| Path of the homepage note | `homepage.md` | Empty switches the whole homepage group off |
-| Open on startup | on | |
+| Hour format | 24-hour | Or 12-hour, which reads 2:05 PM. Digits only — the timer always counts down. |
+| Path of the homepage note | **empty** | Leaving it empty switches the whole homepage group off |
+| Open on startup | off | Only does something once a path above is set |
 | How to open it | Replace the current tab | Or open in a new tab |
 | Always open the homepage in reading mode | on | Homepage only; other notes untouched |
 | Hide the note title | on | Scoped to the homepage, not a global switch |
@@ -146,6 +147,13 @@ a page they look at every day. Turn it on if it helps you; leave it off if it do
 ## Requirements
 
 Obsidian 1.4.0 or later. Desktop and mobile.
+
+On a narrow screen — a phone in portrait, or a note dragged into a thin pane — the clock
+scales itself down between 36 px and 52 px instead of staying at 56 px, and the padding
+above and below shrinks with it. Everything else keeps its proportions, because every
+measurement in the stylesheet is derived from that one size. Worth knowing that this was
+done by reasoning about the geometry rather than by running it on a device, so treat the
+phone as *expected to work* rather than *verified*.
 
 ## License
 
@@ -244,8 +252,9 @@ MIT — see [LICENSE](LICENSE).
 | 设置项 | 默认 | 说明 |
 |---|---|---|
 | 界面语言 | 跟随 Obsidian | 中文 / 英文 |
-| 首页笔记的路径 | `homepage.md` | **留空会关掉整组首页行为** |
-| 启动时打开 | 开 | |
+| 小时制 | 24 小时 | 也可选 12 小时，读作 2:05 PM。只影响这枚钟 —— 计时器显示的始终是剩余时间 |
+| 首页笔记的路径 | **空** | **留空会关掉整组首页行为** |
+| 启动时打开 | 关 | 上面那个路径填了才有意义 |
 | 打开方式 | 替换当前标签 | 也可在新标签页打开 |
 | 首页始终用阅读模式打开 | 开 | 只作用于首页，其他笔记不受影响 |
 | 藏起首页的笔记标题 | 开 | 只作用于首页，不是全局开关 |
@@ -280,6 +289,10 @@ MIT — see [LICENSE](LICENSE).
 ### 依赖
 
 Obsidian 1.4.0 及以上。桌面端与移动端均可用。
+
+窄屏（手机竖屏，或把笔记拖进很窄的一栏）下，时钟会从 56px 收敛到 36–52px 之间按屏宽连续变化，
+上下留白一起收。其余各处比例不变 —— 样式表里所有尺寸都由那一个变量推出来。
+需要说明的是：这一段是按几何推算写的，**没有在真机上跑过**，请当作「应当可用」而不是「已验证」。
 
 ### 许可
 

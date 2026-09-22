@@ -73,6 +73,13 @@ const OWN = {
       "上次的计时在 Obsidian 关闭期间已经走完，已停在下一段的开头（不会替你补记）",
     "notice.notFound": "找不到这篇笔记：{path}",
 
+    "settings.clock.heading": "时钟",
+    "settings.hourFormat.name": "小时制",
+    "settings.hourFormat.desc":
+      "24 小时制读作 14:05，12 小时制读作 2:05 PM。只影响笔记里的那枚时钟 —— 计时器显示的始终是剩余时间，跟它无关。",
+    "settings.hourFormat.24": "24 小时（14:05）",
+    "settings.hourFormat.12": "12 小时（2:05 PM）",
+
     "settings.home.heading": "首页",
     "settings.homePath.name": "首页笔记的路径",
     "settings.homePath.desc":
@@ -189,6 +196,13 @@ const OWN = {
     "notice.staleTimer":
       "The last timer ran out while Obsidian was closed. It is parked at the start of the next phase rather than back-filled.",
     "notice.notFound": "No note at that path: {path}",
+
+    "settings.clock.heading": "Clock",
+    "settings.hourFormat.name": "Hour format",
+    "settings.hourFormat.desc":
+      "24-hour reads 14:05; 12-hour reads 2:05 PM. This is only for the clock in your notes — the timer always counts down and is unaffected.",
+    "settings.hourFormat.24": "24-hour (14:05)",
+    "settings.hourFormat.12": "12-hour (2:05 PM)",
 
     "settings.home.heading": "Homepage",
     "settings.homePath.name": "Path of the homepage note",

@@ -30,10 +30,17 @@ const bodyAt = src.indexOf("内联模块结束");
 const body = src.slice(bodyAt);
 
 /* 取所有形如 xxx.yyy 的字符串字面量。
-   不区分它出现在 t("...") 里还是当作参数传给辅助函数 ——
-   numberSetting("workMinutes", "settings.work.name", ...) 这种写法
-   键名并不直接包在 t() 里，只扫 t() 会漏掉一大半。 */
-const literalRe = /"([a-z][a-zA-Z]*(?:\.[a-zA-Z][a-zA-Z0-9]*)+)"/g;
+
+   两点需要注意：
+   一、不区分它出现在 t("...") 里，还是当作参数传给辅助函数 ——
+       numberSetting("workMinutes", "settings.work.name", ...) 这种写法
+       键名并不直接包在 t() 里，只扫 t() 会漏掉一大半。
+   二、点分段允许以数字开头。这一条是被 bug 倒逼出来的：原先写作
+       \.[a-zA-Z][a-zA-Z0-9]*，于是 settings.hourFormat.24 / .12 这类键
+       被静默跳过 —— 既不计入，也永远不会被报缺，界面上直接漏出一串原文
+       而测试照样是绿的。键的末段完全可以是纯数字（下拉选项的取值、枚举名），
+       不容许它出现，等于把这一类键整片排除在检查之外。 */
+const literalRe = /"([a-z][a-zA-Z]*(?:\.[a-zA-Z0-9][a-zA-Z0-9]*)+)"/g;
 
 /* 这个正则也会吃到文件名：`"homepage.md"` 同样长得像 xxx.yyy。
    按末段是不是常见扩展名来排除 —— 否则每加一个 .md 字面量就报一次假红。 */
