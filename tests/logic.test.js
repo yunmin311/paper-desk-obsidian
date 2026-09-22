@@ -32,7 +32,7 @@ const slice = src.slice(src.indexOf("*/", from) + 2, src.lastIndexOf("/*", to));
 
 const factory = new Function(
   slice +
-    "\nreturn { splitHM, formatDuration, durationFor, advancePhase, msToNextMinute, remainingOf, dayKey, needsDailyReset, nextAutoStart };"
+    "\nreturn { splitHM, formatDuration, durationFor, advancePhase, msToNextMinute, remainingOf, dayKey, needsDailyReset, nextAutoStart, matchesRule, matchesAny, aliasOf, displayNameFor, parseNoteLines, dayOfYear, pickNoteFor, isHomePath, shouldForcePreview };"
 );
 const L = factory();
 
@@ -187,6 +187,99 @@ eq(
    L.nextAutoStart("work", { autoStartBreak: false, autoStartWork: false })],
   [false, false]
 );
+
+/* ---------------- matchesRule / matchesAny（首页链接）---------------- */
+eq("精确匹配", L.matchesRule("index", "index"), true);
+eq("精确匹配不收多字符", L.matchesRule("project index", "index"), false);
+eq("前缀", [L.matchesRule("index-a", "index*"), L.matchesRule("a-index", "index*")], [true, false]);
+eq("后缀", [L.matchesRule("a-index", "*index"), L.matchesRule("index-a", "*index")], [true, false]);
+eq("包含", L.matchesRule("my-index-page", "*index*"), true);
+/* 这条最反直觉，值得专门钉住：github 是「以 hub 结尾」的（g-i-t-h-u-b），
+   所以任何锚在结尾的写法都会把它收进来，不只是「包含」那一种。 */
+eq("★ 后缀规则会收掉 github", L.matchesRule("github", "*hub"), true);
+eq("★ 包含规则也会收掉 github", L.matchesRule("github", "*hub*"), true);
+/* github 既不是以 hub 开头，也不等于 hub —— 所以想收 hub 又想避开 github，
+   唯一干净的写法是前缀 hub*。这两条一起钉住才说明白。 */
+eq("前缀规则不会收掉 github", L.matchesRule("github", "hub*"), false);
+eq("前缀规则确实能收以 hub 开头的", L.matchesRule("hub-page", "hub*"), true);
+eq("裸 hub 精确匹配不吃 github", L.matchesRule("github", "hub"), false);
+eq("大小写不敏感", L.matchesRule("MyHub", "*hub*"), true);
+eq("自动去掉 .md 后缀", L.matchesRule("index.md", "index"), true);
+/* 裸 * 若当成「包含空串」就会匹配一切 ——
+   一条手滑的空通配符会把整个库铺到首页上。 */
+eq("裸 * 视为无效", [L.matchesRule("任意", "*"), L.matchesRule("任意", "**")], [false, false]);
+eq("空规则不匹配", L.matchesRule("index", ""), false);
+eq("matchesAny 命中任一条", L.matchesAny("_Project Index", ["*Index*", "*Hub*"]), true);
+eq("matchesAny 全不命中", L.matchesAny("随便", ["*Index*", "*Hub*"]), false);
+eq("matchesAny 空规则表", L.matchesAny("_Project Index", []), false);
+
+/* ---------------- aliasOf / displayNameFor ---------------- */
+eq("YAML 列表取第一个", L.aliasOf({ aliases: ["英语学习", "备用"] }), "英语学习");
+eq("单条字符串", L.aliasOf({ aliases: "英语学习" }), "英语学习");
+eq("逗号分隔", L.aliasOf({ aliases: "英语学习, 备用" }), "英语学习");
+eq("alias 单数键也认", L.aliasOf({ alias: "英语学习" }), "英语学习");
+eq("没有别名返回空", L.aliasOf({}), "");
+eq("null 不出错", L.aliasOf(null), "");
+eq("数字等非字符串也能转", L.aliasOf({ aliases: [2026] }), "2026");
+eq("有别名就用别名", L.displayNameFor("_English Learning Hub", { aliases: ["英语学习"] }), "英语学习");
+eq("没有别名就用文件名", L.displayNameFor("_English Learning Hub", null), "_English Learning Hub");
+eq("文件名为空时退化成空串", L.displayNameFor(null, null), "");
+
+/* ---------------- parseNoteLines（首页手写句）---------------- */
+eq("空块读出空列表", L.parseNoteLines(""), []);
+eq("只有空行也读出空列表", L.parseNoteLines("\n\n   \n"), []);
+eq("一行就是一句", L.parseNoteLines("今天先把一件事做完"), ["今天先把一件事做完"]);
+eq("两端空白会被去掉", L.parseNoteLines("  慢慢来  "), ["慢慢来"]);
+eq("空行不进列表", L.parseNoteLines("甲\n\n乙"), ["甲", "乙"]);
+/* 手写句这种东西，人一定会在上面写「夏天用」「别太长」之类的备注，
+   不撑住就会被当成句子显示出来。 */
+eq("# 开头的是注释", L.parseNoteLines("# 夏天用\n甲\n# 别太长\n乙"), ["甲", "乙"]);
+eq("null 不出错", L.parseNoteLines(null), []);
+
+/* ---------------- dayOfYear / pickNoteFor ---------------- */
+eq("1 月 1 日是第 1 天", L.dayOfYear(new Date(2026, 0, 1)), 1);
+eq("平年最后一天是 365", L.dayOfYear(new Date(2026, 11, 31)), 365);
+/* 闰年这条最值得钉住：手搓月份天数表每隔四年会错一天，而且错得很安静。 */
+eq("闰年最后一天是 366", L.dayOfYear(new Date(2024, 11, 31)), 366);
+eq("闰年 2 月 29 日是第 60 天", L.dayOfYear(new Date(2024, 1, 29)), 60);
+eq("平年 3 月 1 日是第 60 天", L.dayOfYear(new Date(2026, 2, 1)), 60);
+
+eq("没有句子就返回空", L.pickNoteFor([], new Date(2026, 0, 1)), "");
+eq("null 列表不出错", L.pickNoteFor(null, new Date(2026, 0, 1)), "");
+eq("只有一句时固定不变", L.pickNoteFor(["唯一"], new Date(2026, 5, 20)), "唯一");
+
+/* 多句时相邻两天必须不同。取模而不是随机，就是为了这条 ——
+   随机在句数少的时候连续撞同一句的概率不低，看着像坏了。 */
+{
+  const lines = ["甲", "乙", "丙"];
+  let ok = true;
+  let prev = null;
+  for (let d = 1; d <= 90; d++) {
+    const got = L.pickNoteFor(lines, new Date(2026, 0, d));
+    if (got === prev) ok = false;
+    prev = got;
+  }
+  eq("连续 90 天里相邻两天不重复", ok, true);
+}
+/* 走完一圈要覆盖每一句 —— 否则等于有几句永远看不到。 */
+{
+  const lines = ["甲", "乙", "丙", "丁", "戊"];
+  const seen = new Set();
+  for (let d = 1; d <= 5; d++) seen.add(L.pickNoteFor(lines, new Date(2026, 0, d)));
+  eq("五天走完五句", seen.size, 5);
+}
+
+/* ---------------- isHomePath / shouldForcePreview ---------------- */
+eq("isHomePath 认得首页", L.isHomePath("homepage.md", "homepage.md"), true);
+eq("isHomePath 不认别的笔记", L.isHomePath("homepage.md", "a.md"), false);
+eq("isHomePath 路径为空时一律不是", L.isHomePath("", "homepage.md"), false);
+eq("开关关掉就一律不干预", L.shouldForcePreview(false, "homepage.md", "homepage.md"), false);
+eq("在首页上要干预", L.shouldForcePreview(true, "homepage.md", "homepage.md"), true);
+/* 这条最要紧：需求原话是「只有 homepage 是默认阅读模式，其他笔记正常」。
+   写错成「对所有笔记都强制阅读」会毁掉整个库的编辑体验。 */
+eq("★ 别的笔记不受影响", L.shouldForcePreview(true, "homepage.md", "其他笔记.md"), false);
+eq("首页路径带空格也能认", L.shouldForcePreview(true, "  homepage.md  ", "homepage.md"), true);
+eq("子目录下的同名文件不算首页", L.shouldForcePreview(true, "homepage.md", "子目录/homepage.md"), false);
 
 /* ---------------- 结果 ---------------- */
 if (fails.length) {

@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.2.0
+
+**The homepage, folded in.** Until now this was two plugins, and that was the wrong shape.
+Both of them wrote to the same note and to the same view — one for the clock and the timer,
+the other for opening the page, hiding its title and forcing reading mode. Two plugins
+managing one page is two sources of truth, and for the person using it, two things to
+install, enable, update and read about in order to get one homepage.
+
+So `ym-homepage` is gone and everything lives here. Its id was never published, so nothing
+external breaks. The three code-block languages keep their names (`clock`, `home-links`,
+`home-note`), which means an existing homepage note needs no editing at all.
+
+**Merging also removed a setting.** The two plugins each had their own handwriting font
+setting, which is the clearest sign they should not have been separate — nobody wants to
+choose the same font twice. One setting now covers both the timer's phase name and the
+homepage line.
+
+**The homepage can be switched off entirely.** Leaving the path empty disables opening it,
+hiding its title and forcing reading mode as a group, leaving a clock and a timer that touch
+no note of yours. This is the honest answer to the objection that bundling a homepage into a
+clock plugin forces it on people who only wanted the clock.
+
+What the homepage does, and why, is unchanged from the two-plugin version:
+
+*The title.* Obsidian's switch for the inline filename title is global, so "no title on this
+one note" is not expressible in the settings. The view currently showing the homepage is
+tagged, and the rule is scoped to that tag — on the view rather than on `body`, which is
+shared across a split and would hide the other pane's title too.
+
+*The mode.* Arriving at the homepage always lands in reading mode, because the caret would
+otherwise land inside a code block. Only on arrival: switching into editing deliberately is
+not fought, so the page stays editable. Hooked on `file-open`, which fires when the active
+file changes but not when toggling mode within one note.
+
+*The line.* `home-note` shows what you write in it; one line is fixed, several rotate daily,
+picked as `day-of-year % count` rather than at random — random repeats a sentence on
+consecutive days often enough to look broken. It counts nothing.
+
+*The links.* `home-links` builds from rules so the list never goes stale.
+
+Tests: 41 -> 93 logic cases. One of them caught a mistake in itself — an assertion claimed
+`hub*` would match `github`, which is wrong in both directions (it is a prefix rule, and
+`github` does not start with `hub`). Assertions that cannot go red are not assertions.
+
 ## 0.1.0
 
 First release.

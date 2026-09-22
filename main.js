@@ -76,13 +76,16 @@ const COMMON = {
 const OWN = {
   zh: {
     "meta.desc":
-      "在笔记顶部放一枚安静的时钟，在侧栏放一个专注计时器。两者都刻意做得不占地方。",
+      "案头上的三样东西：笔记顶部一枚安静的时钟、侧栏一个专注计时器，以及把它们串起来的那个首页。三者都刻意做得不占地方。",
 
     "command.openTimer": "打开专注计时器",
     "command.toggleTimer": "开始 / 暂停计时",
     "command.resetTimer": "重置计时",
     "command.skipPhase": "跳到下一段",
     "command.insertClock": "插入时钟代码块",
+    "command.openHome": "打开首页",
+    "command.insertLinks": "插入首页链接区块",
+    "command.insertNote": "插入首页手写句区块",
 
     /* 阶段名。这三个词会用手写字体渲染 —— 它们是全插件唯一用手写体的地方，
        刻意选短词：手写体在长句上可读性会塌。 */
@@ -107,6 +110,48 @@ const OWN = {
     "notice.reset": "计时已重置",
     "notice.staleTimer":
       "上次的计时在 Obsidian 关闭期间已经走完，已停在下一段的开头（不会替你补记）",
+    "notice.notFound": "找不到这篇笔记：{path}",
+
+    "settings.home.heading": "首页",
+    "settings.homePath.name": "首页笔记的路径",
+    "settings.homePath.desc":
+      "从库根目录算起的完整路径，要带 .md。留空会彻底关掉「打开、藏标题、强制阅读」这一整组行为 —— 那时它就只是一枚时钟加一个计时器，不碰你的任何一篇笔记。",
+    "settings.openOnStartup.name": "启动时打开",
+    "settings.openOnStartup.desc": "Obsidian 启动后自动打开上面那篇笔记。",
+    "settings.openMode.name": "打开方式",
+    "settings.openMode.desc":
+      "「替换当前标签」会把恢复出来的那篇笔记挤掉 —— 这通常正是首页想要的。",
+    "settings.openMode.replace": "替换当前标签",
+    "settings.openMode.newTab": "在新标签页打开",
+    "settings.forcePreview.name": "首页始终用阅读模式打开",
+    "settings.forcePreview.desc":
+      "每次打开首页、或者从别的笔记切回来，都落在阅读模式。不这样做的话，光标会掉进 clock 这类代码块里，随手打一个字就把代码块改坏了。想改首页内容时自己切进编辑模式即可，插件不拦 —— 只是下次再打开时又回到阅读。只作用于首页，其他笔记不受影响。",
+    "settings.hideTitle.name": "藏起首页的笔记标题",
+    "settings.hideTitle.desc":
+      "Obsidian 只给了一个「显示文件名标题」的全局开关，改了会影响库里每一篇笔记 —— 所以「只在这一篇上不显示」在原生设置里做不到。这个开关只作用于首页那篇。标签页上的标题会保留，藏掉的只是正文顶部那一行的文件名。",
+
+    "settings.note.heading": "首页手写句",
+    "settings.note.desc":
+      "代码块里写什么就显示什么：只写一行就是固定那一句；写多行就会每天换一句。它不计数、不累积 —— 只是一句人话。",
+    "settings.noteStyle.name": "样式",
+    "settings.noteStyle.desc":
+      "「素句」只有字。另外两个各多一样装饰：手绘引号，或者整句轻微倾斜。时钟下面已经有一条手绘线了，所以这里不再给下划线 —— 同一种装饰出现两次，页面就从一枚印章变成一本贴纸册。",
+    "settings.noteStyle.plain": "素句",
+    "settings.noteStyle.quotes": "手绘引号",
+    "settings.noteStyle.tilt": "轻微倾斜",
+    "settings.noteSize.name": "字号",
+    "settings.noteSize.desc":
+      "单位是 px。手写体比正文字体显小，所以默认值比正文大不少。",
+
+    "settings.links.heading": "首页链接",
+    "settings.links.desc":
+      "下面这个代码块会按规则自动生成链接列表 —— 库里的笔记改了名、新增了，列表跟着变，不需要手工维护。",
+    "settings.rules.name": "要收进来的文件名",
+    "settings.rules.desc":
+      "每行一条关键词（不含 .md 后缀，不区分大小写）。用 * 作通配符：index 精确匹配；index* 以 index 开头；*index 以 index 结尾；*index* 含 index 即收录。注意一个反直觉的地方：github 是以 hub 结尾的，所以 *hub 和 *hub* 都会把 github 相关的笔记收进来；想避开就用 hub* 或精确写 hub。",
+    "settings.linksGap.name": "链接上方留多少空",
+    "settings.linksGap.desc":
+      "用视口高度的百分比表示（0–150）。默认 55，意思是「要往下滚才看得到」。调小它就往上浮。",
 
     "settings.timer.heading": "专注计时器",
     "settings.work.name": "专注时长（分钟）",
@@ -142,7 +187,7 @@ const OWN = {
     "settings.font.heading": "外观",
     "settings.font.name": "手写字体",
     "settings.font.desc":
-      "用于计时器里的阶段名（专注 / 短休息 / 长休息）。填一个 CSS font-family，多个用逗号分隔、按顺序回落；留空表示跟随正文。时钟下方的笔迹是画出来的线，不依赖字体。",
+      "同一个手写体用在两处：计时器里的阶段名（专注 / 短休息 / 长休息），和首页手写句。填一个 CSS font-family，多个用逗号分隔、按顺序回落；留空表示跟随正文。时钟下方那条笔迹是画出来的线，不依赖字体。",
     "settings.reset.name": "恢复默认设置",
     "settings.reset.desc":
       "把时长、手写字体与轮次显示都恢复初值（界面语言会保留 —— 那是设置页自身的属性，不属于插件配置）。",
@@ -150,13 +195,16 @@ const OWN = {
 
   en: {
     "meta.desc":
-      "A quiet clock for the top of a note and a pomodoro timer for the sidebar. Both stay out of the way.",
+      "Three things on the desk: a quiet clock for the top of a note, a pomodoro timer for the sidebar, and the homepage that ties them together. All three stay out of the way.",
 
     "command.openTimer": "Open the focus timer",
     "command.toggleTimer": "Start or pause the timer",
     "command.resetTimer": "Reset the timer",
     "command.skipPhase": "Skip to the next phase",
     "command.insertClock": "Insert a clock block",
+    "command.openHome": "Open the homepage",
+    "command.insertLinks": "Insert a homepage link block",
+    "command.insertNote": "Insert a homepage line block",
 
     "phase.work": "Focus",
     "phase.short": "Short break",
@@ -179,6 +227,48 @@ const OWN = {
     "notice.reset": "Timer reset",
     "notice.staleTimer":
       "The last timer ran out while Obsidian was closed. It is parked at the start of the next phase rather than back-filled.",
+    "notice.notFound": "No note at that path: {path}",
+
+    "settings.home.heading": "Homepage",
+    "settings.homePath.name": "Path of the homepage note",
+    "settings.homePath.desc":
+      "Full path from the vault root, including .md. Leave it empty and the whole group below — opening it, hiding its title, forcing reading mode — switches off entirely, leaving a clock and a timer that touch no note of yours at all.",
+    "settings.openOnStartup.name": "Open on startup",
+    "settings.openOnStartup.desc": "Open that note once Obsidian has started.",
+    "settings.openMode.name": "How to open it",
+    "settings.openMode.desc":
+      '"Replace the current tab" pushes aside whatever the session restored — which is usually what a homepage is for.',
+    "settings.openMode.replace": "Replace the current tab",
+    "settings.openMode.newTab": "Open in a new tab",
+    "settings.forcePreview.name": "Always open the homepage in reading mode",
+    "settings.forcePreview.desc":
+      "Land in reading mode every time the homepage opens, or every time you switch back to it from another note. Without this the caret lands inside a code block such as clock, and one stray keystroke breaks the block. Switch into editing yourself when you want to change something — the plugin does not fight you, it just returns to reading mode the next time you arrive. The homepage only; other notes are untouched.",
+    "settings.hideTitle.name": "Hide the note title on the homepage",
+    "settings.hideTitle.desc":
+      "Obsidian only offers a global switch for the inline filename title, and changing it affects every note in the vault — so \"no title on this one note\" is not something the native settings can do. This applies to the homepage alone. The tab title stays; only the filename line at the top of the page is hidden.",
+
+    "settings.note.heading": "Homepage line",
+    "settings.note.desc":
+      "The block shows exactly what you write in it: one line means a fixed line, several means it changes once a day. It counts nothing and accumulates nothing — it is just a sentence.",
+    "settings.noteStyle.name": "Style",
+    "settings.noteStyle.desc":
+      '"Plain" is the words alone. The other two each add one decoration: drawn quotation marks, or a slight tilt. The clock already has a drawn rule under it, so there is no underline here — let one decoration appear twice and the page stops being a seal and becomes a sticker album.',
+    "settings.noteStyle.plain": "Plain",
+    "settings.noteStyle.quotes": "Drawn quotes",
+    "settings.noteStyle.tilt": "Slight tilt",
+    "settings.noteSize.name": "Size",
+    "settings.noteSize.desc":
+      "In px. Handwriting fonts read smaller than body fonts, so the default sits well above body size.",
+
+    "settings.links.heading": "Homepage links",
+    "settings.links.desc":
+      "The block below builds its link list from rules, so renaming a note or adding a new one updates the list for you — nothing to maintain by hand.",
+    "settings.rules.name": "File names to collect",
+    "settings.rules.desc":
+      "One keyword per line (without the .md extension, case-insensitive). Use * as a wildcard: index matches exactly; index* starts with index; *index ends with index; *index* contains index. One counter-intuitive trap: github ends with hub, so both *hub and *hub* will pull in github-flavoured notes — use hub* or a bare hub to avoid that.",
+    "settings.linksGap.name": "Blank space above the links",
+    "settings.linksGap.desc":
+      "As a percentage of the viewport height (0-150). The default, 55, means you have to scroll down to reach them. Lower it to bring them up.",
 
     "settings.timer.heading": "Focus timer",
     "settings.work.name": "Focus length (minutes)",
@@ -220,7 +310,7 @@ const OWN = {
     "settings.font.heading": "Appearance",
     "settings.font.name": "Handwriting font",
     "settings.font.desc":
-      "Used for the phase name (Focus / Short break / Long break). Give a CSS font-family; commas fall back in order. Empty follows your body font. The stroke under the clock is a drawn path, so it needs no font.",
+      'One handwriting font for two things: the phase name (Focus / Short break / Long break) and the homepage line. Give a CSS font-family; commas fall back in order. Empty follows your body font. The stroke under the clock is a drawn path, so it needs no font.',
     "settings.reset.name": "Restore defaults",
     "settings.reset.desc":
       "Reset the durations, the handwriting font and the round counter (the interface language is kept — it belongs to the settings page, not to the plugin).",
@@ -351,6 +441,8 @@ function renderSponsor(parent, t) {
 /* ============================ 常量 ============================ */
 
 const CLOCK_LANG = "clock";
+const LINKS_LANG = "home-links";
+const NOTE_LANG = "home-note";
 const VIEW_TYPE = "paper-desk-timer";
 const CSS_PREFIX = "pd-";
 
@@ -364,6 +456,31 @@ const DEFAULTS = {
   // 界面语言：auto / zh / en（见 i18n.js）。
   language: "auto",
   handwritingFont: DEFAULT_FONT_STACK,
+
+  // ---- 首页 ----
+  homePath: "homepage.md",
+  openOnStartup: true,
+  // "replace" | "newTab"
+  openMode: "replace",
+  /* 默认开：这两件事 Obsidian 自己都做不到，而它们正是「首页还像一篇笔记」的两处破绽。
+     标题 —— 原生只有全局开关，改了会影响库里每一篇笔记。
+     模式 —— 落在编辑模式时光标会掉进 clock 这类代码块里，随手打一个字就把代码块改坏了。 */
+  forcePreview: true,
+  hideTitle: true,
+  noteStyle: "plain",
+  /* 手写体比正文显小：同样的 px 值，楷体看上去比无衬线小一号。
+     默认给到 24 而不是 16 —— 再小就退化成「一段普通正文」，笔锋看不出来。 */
+  noteSize: 24,
+  /* 默认规则照着常用 hub 笔记的命名来：`000_Index` / `_Project Index` 命中 *Index*，
+     `_English Learning Hub` 命中 *Hub*。形状不同的（如 `00-目录`）
+     由使用者自己在设置里补一条精确规则。 */
+  rules: ["*Index*", "*Hub*"],
+  /* 链接上方的留白，单位是「视口高度的百分比」。
+     做成设置项是因为它取决于屏幕高度与个人口味 —— 固定值在小屏上会刚好露出来，
+     在大屏上又不够远。55 的意思是「要往下滚才看得到」。 */
+  linksGap: 55,
+
+  // ---- 计时器 ----
   workMinutes: 25,
   shortMinutes: 5,
   longMinutes: 15,
@@ -476,6 +593,117 @@ function nextAutoStart(nextPhase, settings) {
   return nextPhase === "work" ? !!settings.autoStartWork : !!settings.autoStartBreak;
 }
 
+/* ==================== 首页：规则匹配与手写句 ====================
+   与 quiet-shelf 用的是同一套通配符语义，因为那是 qy 已经熟悉的心智模型。 */
+
+/**
+ * 通配符规则匹配：
+ *   index    精确
+ *   index*   以 index 开头
+ *   *index   以 index 结尾
+ *   *index*  包含 index
+ * 只看文件名（去掉 .md），不区分大小写。
+ *
+ * ⚠️ 反直觉之处：`github` 是**以 `hub` 结尾**的（g-i-t-h-u-b），
+ * 所以 `*hub` 与 `*hub*` 都会把它收进来。这不是 bug，是后缀锚定的必然结果 ——
+ * 设置页里明说了，测试里也钉住了。
+ */
+function matchesRule(name, rule) {
+  const base = String(name == null ? "" : name)
+    .replace(/\.md$/i, "")
+    .toLowerCase();
+  let key = String(rule == null ? "" : rule).trim().toLowerCase();
+  if (!key) return false;
+
+  const head = key.startsWith("*");
+  const tail = key.endsWith("*");
+  if (head) key = key.slice(1);
+  if (tail) key = key.slice(0, -1);
+  key = key.trim();
+  /* 裸的 * / ** 视为无效规则。若当成「包含空串」就会匹配一切，
+     一条手滑的空通配符会悄悄把整个库铺到首页上。 */
+  if (!key) return false;
+
+  if (head && tail) return base.includes(key);
+  if (tail) return base.startsWith(key);
+  if (head) return base.endsWith(key);
+  return base === key;
+}
+
+/** 文件名是否命中规则中的任意一条。 */
+function matchesAny(name, rules) {
+  const list = Array.isArray(rules) ? rules : [];
+  for (const r of list) if (matchesRule(name, r)) return true;
+  return false;
+}
+
+/** 取 frontmatter 里的第一个别名。
+    兼容三种写法：YAML 列表 `aliases: [a, b]`、单条 `aliases: a`、
+    以及逗号分隔的字符串 `aliases: a, b`（Obsidian 两者都认）。 */
+function aliasOf(frontmatter) {
+  if (!frontmatter || typeof frontmatter !== "object") return "";
+  const raw =
+    frontmatter.aliases !== undefined ? frontmatter.aliases : frontmatter.alias;
+  if (raw === undefined || raw === null) return "";
+  if (Array.isArray(raw)) return String(raw[0] === undefined ? "" : raw[0]).trim();
+  return String(raw).split(",")[0].trim();
+}
+
+/** 链接显示名：别名优先，否则文件名。
+    不在这里去掉前导下划线 —— 那是命名习惯，不是插件该替他决定的事。 */
+function displayNameFor(basename, frontmatter) {
+  const a = aliasOf(frontmatter);
+  return a || String(basename == null ? "" : basename);
+}
+
+/**
+ * 从代码块正文里读出句子。
+ * 一行一句；空行跳过；以 # 开头的行当作注释跳过 ——
+ * 手写句这种东西，人很容易想在上面写个「夏天用」「别太长」之类的备注。
+ */
+function parseNoteLines(source) {
+  return String(source == null ? "" : source)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+}
+
+/**
+ * 今天是这一年的第几天（1 起算）。
+ * 用「减掉去年最后一天」而不是手搓月份天数表：闰年由 Date 自己负责，
+ * 手搓的那张表每隔四年会错一天，而且错得很安静。
+ */
+function dayOfYear(date) {
+  const d = date instanceof Date ? date : new Date();
+  const start = new Date(d.getFullYear(), 0, 0);
+  return Math.floor((d - start) / 86400000);
+}
+
+/**
+ * 今天该显示哪一句。
+ * 用「第几天 % 句数」而不是随机、也不是「距上次打开过了几天」：
+ *  - 随机会让连续两天撞同一句，句数少的时候概率不低，看着像坏了；
+ *  - 按天取模保证相邻两天一定不同，并且把整个列表均匀走完一圈再重复。
+ */
+function pickNoteFor(lines, date) {
+  const list = Array.isArray(lines) ? lines : [];
+  if (!list.length) return "";
+  if (list.length === 1) return list[0];
+  return list[dayOfYear(date) % list.length];
+}
+
+/** 是不是首页。抽成函数是为了能单测，也为了让两处开关共用同一个判断。 */
+function isHomePath(homePath, filePath) {
+  const home = String(homePath || "").trim();
+  const cur = String(filePath || "").trim();
+  return !!home && !!cur && cur === home;
+}
+
+/** 该不该把首页按回阅读模式。见 enforcePreview 里的说明。 */
+function shouldForcePreview(force, homePath, filePath) {
+  return !!force && isHomePath(homePath, filePath);
+}
+
 /* ============================ 时钟 ============================ */
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -559,6 +787,96 @@ class ClockBlock extends MarkdownRenderChild {
   onunload() {
     if (this._timeout) window.clearTimeout(this._timeout);
     this._timeout = 0;
+  }
+}
+
+/* ======================= 首页手写句区块 ======================= */
+
+/**
+ * 一只手绘引号。
+ * 走 currentColor 而不是写死颜色 —— 颜色必须跟着主题走，这是这条插件线的总原则；
+ * 引号只是笔画，不该比字更显眼，所以它继承文字色。
+ */
+function buildQuoteMark(side) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", CSS_PREFIX + "quote");
+  svg.setAttribute("viewBox", "0 0 12 14");
+  svg.setAttribute("width", "12");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("aria-hidden", "true");
+
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute(
+    "d",
+    side === "left"
+      ? "M 9 3 C 9 0 4 0 3 3 C 2 6 6 7 6 11"
+      : "M 3 3 C 3 0 8 0 9 3 C 10 6 6 7 6 11"
+  );
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.4");
+  path.setAttribute("stroke-linecap", "round");
+  svg.appendChild(path);
+  return svg;
+}
+
+class NoteBlock extends MarkdownRenderChild {
+  constructor(containerEl, plugin, source) {
+    super(containerEl);
+    this.plugin = plugin;
+    this.source = source;
+  }
+
+  onload() {
+    const lines = parseNoteLines(this.source);
+    /* 空块什么都不渲染。首页要的是留白 —— 一个「还没有写句子」的占位提示
+       本身就是噪音，而且它会一直待在那里提醒你还没写。 */
+    if (!lines.length) return;
+
+    const line = pickNoteFor(lines, new Date());
+    if (!line) return;
+
+    const style = this.plugin.settings.noteStyle || "plain";
+    const root = this.containerEl.createDiv({
+      cls: `${CSS_PREFIX}note ${CSS_PREFIX}note-${style}`,
+    });
+
+    if (style === "quotes") root.appendChild(buildQuoteMark("left"));
+    root.createSpan({ cls: CSS_PREFIX + "note-text", text: line });
+    if (style === "quotes") root.appendChild(buildQuoteMark("right"));
+  }
+}
+
+/** 用 MarkdownRenderChild 挂到渲染上下文上：笔记重渲染或关闭时 onunload 会被调用，
+    不会留下悬挂的 DOM。区块本身不持有定时器，所以 onunload 无需额外清理。 */
+class LinksBlock extends MarkdownRenderChild {
+  constructor(containerEl, plugin) {
+    super(containerEl);
+    this.plugin = plugin;
+  }
+
+  onload() {
+    const items = this.plugin.collectHubs();
+    /* 一条都没命中就什么都不渲染。
+       首页要的是留白，不是「没有结果」的占位提示 —— 那种提示本身就是噪音。
+       真要排查规则，看设置页的说明就够了。 */
+    if (!items.length) return;
+
+    const root = this.containerEl.createDiv({ cls: CSS_PREFIX + "links" });
+    const list = root.createEl("ul", { cls: CSS_PREFIX + "list" });
+
+    for (const item of items) {
+      const li = list.createEl("li", { cls: CSS_PREFIX + "item" });
+      const a = li.createEl("a", {
+        cls: CSS_PREFIX + "link",
+        text: item.title,
+        href: item.file.path,
+      });
+      a.onclick = (e) => {
+        e.preventDefault();
+        this.plugin.app.workspace.openLinkText(item.file.path, "", false);
+      };
+    }
   }
 }
 
@@ -701,6 +1019,143 @@ class PaperDeskSettingTab extends PluginSettingTab {
         });
       });
 
+    /* ---- 首页 ----
+       这一组放在计时器前面：它们决定的是「你打开 Obsidian 时看到什么」，
+       而计时器是「你坐下来之后用什么」。 */
+    containerEl.createEl("h3", { text: t("settings.home.heading") });
+
+    new Setting(containerEl)
+      .setName(t("settings.homePath.name"))
+      .setDesc(t("settings.homePath.desc"))
+      .addText((txt) =>
+        txt.setValue(s.homePath || "").onChange(async (v) => {
+          s.homePath = v.trim();
+          await this.plugin.save();
+          this.plugin.markHomeViews();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(t("settings.openOnStartup.name"))
+      .setDesc(t("settings.openOnStartup.desc"))
+      .addToggle((tg) =>
+        tg.setValue(!!s.openOnStartup).onChange(async (v) => {
+          s.openOnStartup = v;
+          await this.plugin.save();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(t("settings.openMode.name"))
+      .setDesc(t("settings.openMode.desc"))
+      .addDropdown((drop) => {
+        drop.addOption("replace", t("settings.openMode.replace"));
+        drop.addOption("newTab", t("settings.openMode.newTab"));
+        drop.setValue(s.openMode || "replace").onChange(async (v) => {
+          s.openMode = v;
+          await this.plugin.save();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName(t("settings.forcePreview.name"))
+      .setDesc(t("settings.forcePreview.desc"))
+      .addToggle((tg) =>
+        tg.setValue(!!s.forcePreview).onChange(async (v) => {
+          s.forcePreview = v;
+          await this.plugin.save();
+          if (v) {
+            const home = String(s.homePath || "").trim();
+            if (home) {
+              this.plugin.enforcePreview(this.app.vault.getAbstractFileByPath(home));
+            }
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(t("settings.hideTitle.name"))
+      .setDesc(t("settings.hideTitle.desc"))
+      .addToggle((tg) =>
+        tg.setValue(!!s.hideTitle).onChange(async (v) => {
+          s.hideTitle = v;
+          await this.plugin.save();
+          this.plugin.markHomeViews();
+        })
+      );
+
+    /* ---- 首页手写句 ---- */
+    containerEl.createEl("h3", { text: t("settings.note.heading") });
+    containerEl.createDiv({ cls: CSS_PREFIX + "setting-note", text: t("settings.note.desc") });
+
+    new Setting(containerEl)
+      .setName(t("settings.noteStyle.name"))
+      .setDesc(t("settings.noteStyle.desc"))
+      .addDropdown((drop) => {
+        drop.addOption("plain", t("settings.noteStyle.plain"));
+        drop.addOption("quotes", t("settings.noteStyle.quotes"));
+        drop.addOption("tilt", t("settings.noteStyle.tilt"));
+        drop.setValue(s.noteStyle || "plain").onChange(async (v) => {
+          s.noteStyle = v;
+          await this.plugin.save();
+          this.plugin.refreshBlocks();
+        });
+      });
+
+    /* 字体不在这里另设一项 —— 计时器阶段名和手写句共用「外观」那一项。
+       合并前它们是两个各自独立的设置，没人想为同一个手写体设两遍。 */
+
+    new Setting(containerEl)
+      .setName(t("settings.noteSize.name"))
+      .setDesc(t("settings.noteSize.desc"))
+      .addSlider((sl) =>
+        sl
+          .setLimits(12, 48, 1)
+          .setValue(Number(s.noteSize) || 24)
+          .setDynamicTooltip()
+          .onChange(async (v) => {
+            s.noteSize = v;
+            this.plugin.applyStyles();
+            await this.plugin.save();
+          })
+      );
+
+    /* ---- 首页链接 ---- */
+    containerEl.createEl("h3", { text: t("settings.links.heading") });
+    containerEl.createDiv({ cls: CSS_PREFIX + "setting-note", text: t("settings.links.desc") });
+
+    new Setting(containerEl)
+      .setName(t("settings.rules.name"))
+      .setDesc(t("settings.rules.desc"))
+      .addTextArea((txt) => {
+        txt.setValue((s.rules || []).join("\n")).onChange(async (v) => {
+          s.rules = v
+            .split("\n")
+            .map((x) => x.trim())
+            .filter(Boolean);
+          await this.plugin.save();
+          this.plugin.refreshBlocks();
+        });
+        txt.inputEl.rows = 4;
+      });
+
+    /* 用滑块而不是输入框：这是个「调到手感对为止」的值，
+       滑块带即时数字提示，比让人反复改数字再回头看要快得多。 */
+    new Setting(containerEl)
+      .setName(t("settings.linksGap.name"))
+      .setDesc(t("settings.linksGap.desc"))
+      .addSlider((sl) =>
+        sl
+          .setLimits(0, 150, 5)
+          .setValue(Number(s.linksGap) || 0)
+          .setDynamicTooltip()
+          .onChange(async (v) => {
+            s.linksGap = v;
+            this.plugin.applyStyles();
+            await this.plugin.save();
+          })
+      );
+
     /* ---- 专注计时器 ---- */
     containerEl.createEl("h3", { text: t("settings.timer.heading") });
 
@@ -797,7 +1252,7 @@ class PaperDeskSettingTab extends PluginSettingTab {
         txt.setValue(s.handwritingFont || "").onChange(async (v) => {
           s.handwritingFont = v;
           await this.plugin.save();
-          this.plugin.applyFont();
+          this.plugin.applyStyles();
           this.plugin.refreshViews();
         });
       });
@@ -810,7 +1265,7 @@ class PaperDeskSettingTab extends PluginSettingTab {
           s.handwritingFont = DEFAULT_FONT_STACK;
           await this.plugin.save();
           fontText.setValue(DEFAULT_FONT_STACK);
-          this.plugin.applyFont();
+          this.plugin.applyStyles();
           this.plugin.refreshViews();
         })
     );
@@ -825,8 +1280,12 @@ class PaperDeskSettingTab extends PluginSettingTab {
           const keepLang = s.language;
           Object.assign(s, DEFAULTS, { language: keepLang });
           await this.plugin.save();
-          this.plugin.applyFont();
+          /* 计时器状态刻意不动（它存在 timer 字段里，不在 DEFAULTS 中）——
+             点「恢复默认设置」不该把正在跑的计时一起干掉。 */
+          this.plugin.applyStyles();
           this.plugin.refreshViews();
+          this.plugin.markHomeViews();
+          this.plugin.refreshBlocks();
           new Notice(t("common.reset.done"));
           this.display();
         })
@@ -865,7 +1324,11 @@ class PaperDeskPlugin extends Plugin {
     bindI18n(this);
     const t = (k, v) => this.i18n.t(k, v);
 
-    this.applyFont();
+    this.applyStyles();
+    this.markHomeViews();
+
+    /* 这三行不再是构造相关（this.applyStyles 只是下发 CSS 变量），
+       现在纯粹为了把 style 变量在下一次 render 之前写好。 */
 
     /* 跨天清零放在最前面，早于下面那段「离线走完」的修正 ——
        顺序反了会变成「先补推进一段、再清零」，刚补的那轮就被吃掉了。 */
@@ -903,6 +1366,27 @@ class PaperDeskPlugin extends Plugin {
       ctx.addChild(new ClockBlock(el));
     });
 
+    this.registerMarkdownCodeBlockProcessor(LINKS_LANG, (source, el, ctx) => {
+      ctx.addChild(new LinksBlock(el, this));
+    });
+
+    this.registerMarkdownCodeBlockProcessor(NOTE_LANG, (source, el, ctx) => {
+      ctx.addChild(new NoteBlock(el, this, source));
+    });
+
+    /* 首页那组行为靠这两个事件维持。
+       file-open：活动文件变化（打开首页、从别处切回来）。
+       layout-change：新建标签、分屏、把首页拖到另一个面板。只听一个是漏的。 */
+    this.registerEvent(
+      this.app.workspace.on("file-open", (file) => {
+        this.markHomeViews();
+        this.enforcePreview(file);
+      })
+    );
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => this.markHomeViews())
+    );
+
     this.addCommand({
       id: "open-timer",
       name: t("command.openTimer"),
@@ -928,6 +1412,26 @@ class PaperDeskPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "open-home",
+      name: t("command.openHome"),
+      callback: () => this.openHome(false),
+    });
+
+    this.addCommand({
+      id: "insert-links",
+      name: t("command.insertLinks"),
+      editorCallback: (editor) =>
+        editor.replaceSelection("```" + LINKS_LANG + "\n```\n"),
+    });
+
+    this.addCommand({
+      id: "insert-note",
+      name: t("command.insertNote"),
+      editorCallback: (editor) =>
+        editor.replaceSelection("```" + NOTE_LANG + "\n```\n"),
+    });
+
+    this.addCommand({
       id: "insert-clock",
       name: t("command.insertClock"),
       editorCallback: (editor) => editor.replaceSelection("```" + CLOCK_LANG + "\n```\n"),
@@ -938,21 +1442,53 @@ class PaperDeskPlugin extends Plugin {
     if (stale) {
       this.app.workspace.onLayoutReady(() => new Notice(t("notice.staleTimer")));
     }
+
+    if (this.settings.openOnStartup) {
+      this.app.workspace.onLayoutReady(() => this.openHome(true));
+    }
   }
 
   onunload() {
     // 视图由 Obsidian 按 registerView 回收；这里只需把样式变量撤掉，保证禁用后界面复原。
     document.body.style.removeProperty("--pd-handwriting");
+    document.body.style.removeProperty("--pd-note-size");
+    document.body.style.removeProperty("--pd-links-gap");
+    // 标记也要摘掉，否则藏起来的标题在禁用插件后仍然是藏着的
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      if (leaf.view && leaf.view.containerEl) {
+        leaf.view.containerEl.classList.remove(CSS_PREFIX + "is-home");
+      }
+    }
   }
 
-  /** 手写字体通过 body 上的 CSS 变量下发 —— 用 style 设置比逐个元素设置好，
-      因为侧栏面板是随时重建的，变量挂在 body 上就不用管它什么时候重建。 */
-  applyFont() {
-    const v = String(this.settings.handwritingFont || "").trim();
-    // 留空 = 跟随正文字体（Obsidian 自己的变量，永远存在，不会失败）。
+  /** 把受设置影响的值写成 body 上的 CSS 变量。
+      挂在 body 上而不是逐个元素：面板与笔记视图都是随时重建的，
+      变量放在最外层就不用管它们什么时候重建。 */
+  applyStyles() {
+    const s = this.settings;
+
+    /* 手写字体：同一个变量同时给计时器阶段名和首页手写句用 ——
+       这两处本来就该是同一个字体，合并前是两个各自独立的设置，没人想设两遍。 */
+    const font = String(s.handwritingFont || "").trim();
     document.body.style.setProperty(
       "--pd-handwriting",
-      v || "var(--font-text)"
+      // 留空 = 跟随正文（Obsidian 自己的变量，永远存在，不会失败）
+      font || "var(--font-text)"
+    );
+
+    /* 字号钳在 12–48：再小就不是手写句了，再大会顶到时钟。
+       输入非法（NaN）时写默认值而不是写 "NaNpx" —— 后者会让整条声明作废，
+       字会掉回继承值，看起来像「设置没生效」。 */
+    const size = Number(s.noteSize);
+    document.body.style.setProperty(
+      "--pd-note-size",
+      (Number.isFinite(size) ? Math.min(48, Math.max(12, size)) : 24) + "px"
+    );
+
+    const gap = Number(s.linksGap);
+    document.body.style.setProperty(
+      "--pd-links-gap",
+      (Number.isFinite(gap) ? Math.min(150, Math.max(0, gap)) : 55) + "vh"
     );
   }
 
@@ -999,6 +1535,117 @@ class PaperDeskPlugin extends Plugin {
     this.statusBarEl.setText(
       this.i18n.t("phase." + tm.phase) + " " + formatDuration(left)
     );
+  }
+
+  /* ---- 首页 ---- */
+
+  /**
+   * 打开首页。
+   * silent=true 是启动时那条路径：路径不存在就安静跳过 ——
+   * 启动时弹一个「找不到笔记」的报错，比不打开更烦人。
+   */
+  async openHome(silent) {
+    const path = String(this.settings.homePath || "").trim();
+    if (!path) return;
+
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!file || !file.path) {
+      if (!silent) new Notice(this.i18n.t("notice.notFound", { path }));
+      return;
+    }
+
+    const newLeaf = this.settings.openMode === "newTab";
+    const leaf = this.app.workspace.getLeaf(newLeaf);
+    if (!leaf) return;
+    await leaf.openFile(file);
+
+    // 打开之后补一次：file-open 事件在这个路径上不一定已经触发
+    this.markHomeViews();
+    this.enforcePreview(file);
+  }
+
+  /**
+   * 给「当前显示的是首页」的视图打标记，CSS 靠它只在这一篇上藏标题。
+   *
+   * 标记打在 view 的 containerEl 上，不打在 body 上：body 是全局的，
+   * 分屏时两个标签共用它，那样会把另一篇笔记的标题也一起藏掉。
+   */
+  markHomeViews() {
+    const home = String(this.settings.homePath || "").trim();
+    const on = !!this.settings.hideTitle && !!home;
+
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (!view || !view.containerEl) continue;
+      const isHome = on && !!view.file && isHomePath(home, view.file.path);
+      view.containerEl.classList.toggle(CSS_PREFIX + "is-home", isHome);
+    }
+  }
+
+  /**
+   * 刚切到首页时把它按回阅读模式。
+   *
+   * 只在「到达首页的那一刻」做，这一点很关键：不这么做的话，
+   * 用户在首页里自己切进编辑模式也会被立刻弹回来，首页就改不了了。
+   * 挂在 file-open 上正好 —— 它只在活动文件变化时触发，
+   * 而在同一篇笔记里切换模式不会触发它。
+   *
+   * 用 setMode 前先确认它存在：这是 MarkdownView 上较新的方法，
+   * 老版本没有。缺了就静默跳过，不能因为排版偏好让整个插件挂掉。
+   */
+  enforcePreview(file) {
+    if (!shouldForcePreview(this.settings.forcePreview, this.settings.homePath, file && file.path)) {
+      return;
+    }
+    const home = String(this.settings.homePath || "").trim();
+
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (!view || !view.file || view.file.path !== home) continue;
+      if (typeof view.getMode !== "function" || typeof view.setMode !== "function") continue;
+      if (view.getMode() !== "source") continue;
+      view.setMode("preview");
+    }
+  }
+
+  /** 按规则收集要列在首页上的笔记。
+      排序用 localeCompare + numeric，这样「第 2 篇」会排在「第 10 篇」前面 ——
+      纯字典序会把 10 排到 2 前面，在这种带编号的库里很刺眼。 */
+  collectHubs() {
+    const rules = (this.settings.rules || []).filter(Boolean);
+    if (!rules.length) return [];
+
+    const home = String(this.settings.homePath || "").trim();
+    const out = [];
+
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      // 别把首页自己列进去
+      if (home && file.path === home) continue;
+      if (!matchesAny(file.basename, rules)) continue;
+
+      const cache = this.app.metadataCache.getFileCache(file);
+      out.push({
+        file,
+        title: displayNameFor(file.basename, cache && cache.frontmatter),
+      });
+    }
+
+    out.sort((a, b) =>
+      a.title.localeCompare(b.title, undefined, { numeric: true })
+    );
+    return out;
+  }
+
+  /** 规则改了之后让已打开的区块重画。
+      直接重画所有 markdown 视图 —— 只对当前那篇有意义，但代价可以忽略，
+      而「去精准定位包含区块的那一篇」要多绕好几层 API。 */
+  refreshBlocks() {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (view && view.previewMode && view.previewMode.rerender) {
+        view.previewMode.rerender(true);
+      }
+    }
   }
 
   async activateView() {

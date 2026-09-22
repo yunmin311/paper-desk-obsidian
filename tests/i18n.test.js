@@ -34,8 +34,17 @@ const body = src.slice(bodyAt);
    numberSetting("workMinutes", "settings.work.name", ...) 这种写法
    键名并不直接包在 t() 里，只扫 t() 会漏掉一大半。 */
 const literalRe = /"([a-z][a-zA-Z]*(?:\.[a-zA-Z][a-zA-Z0-9]*)+)"/g;
+
+/* 这个正则也会吃到文件名：`"homepage.md"` 同样长得像 xxx.yyy。
+   按末段是不是常见扩展名来排除 —— 否则每加一个 .md 字面量就报一次假红。 */
+const EXT_LIKE = /^(md|json|css|js|ts|png|svg|html|yml|yaml|txt|map)$/i;
+
 const keys = new Set();
-for (const m of body.matchAll(literalRe)) keys.add(m[1]);
+for (const m of body.matchAll(literalRe)) {
+  const k = m[1];
+  if (EXT_LIKE.test(k.split(".").pop())) continue;
+  keys.add(k);
+}
 
 /* 动态拼的键：t("phase." + phase)，取值只有这三种。 */
 for (const p of ["work", "short", "long"]) keys.add("phase." + p);
@@ -47,6 +56,12 @@ for (const k of ["settings.language.name", "settings.language.desc",
                  "common.reset", "common.reset.done", "common.clear", "common.open"]) {
   keys.add(k);
 }
+/* 动态拼的键：设置页里 t("settings.noteStyle." + v) 之外的固定取值，
+   以及插件里按阶段拼接的写法，都要在这里补上，否则会漏报。 */
+for (const p of ["plain", "quotes", "tilt"]) keys.add("settings.noteStyle." + p);
+for (const p of ["replace", "newTab"]) keys.add("settings.openMode." + p);
+for (const p of ["off", "notice"]) keys.add("settings.notify." + p);
+for (const p of ["work", "short", "long"]) keys.add("phase." + p);
 
 /* ---- 断言 ---- */
 const missingZh = [];

@@ -111,6 +111,103 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* ============================ 首页 ============================ */
+
+/* 藏掉正文顶部那行文件名 —— 但只对首页。
+   选择器不是本插件的前缀，这是 Obsidian 自己的元素（.inline-title），
+   所以要写清楚为什么在这里覆盖它：Obsidian 只提供了一个全局开关，
+   改了会影响库里每一篇笔记，做不到「只在这一篇上不显示」。
+   标记 .pd-is-home 由插件打在「当前是首页」的那个 view 上。
+
+   用 display:none 而不是 visibility 或透明度：后者会留下那一行占的高度，
+   首页顶部就还是有一块对不齐的空白。 */
+.pd-is-home .inline-title {
+  display: none;
+}
+
+/* ---- 手写句 ---- */
+
+/* 上边距刻意很小：时钟自己带着下留白，这里再叠一层就会把两者推开成两块。
+   手写句要读作「附在时钟上的一句话」，不是另一个独立区块。 */
+.pd-note {
+  margin: 0.5rem auto 0;
+  max-width: 26em;
+  text-align: center;
+}
+
+.pd-note-text {
+  /* 与计时器的阶段名共用同一个手写体变量 —— 它们本来就该是同一支笔。 */
+  font-family: var(--pd-handwriting, var(--font-text));
+  font-size: var(--pd-note-size, 24px);
+  /* 比正文淡一档：它是陪伴时钟的，不是要和时钟争焦点。 */
+  color: var(--text-muted);
+  line-height: 1.55;
+  /* 楷体的字面比无衬线紧，松一点才不发闷。 */
+  letter-spacing: 0.02em;
+}
+
+/* 手绘引号：装饰，所以比字更淡 —— 装饰不该比内容显眼。
+   顶部对齐而不是垂直居中：引号属于第一行的起笔位置，居中会飘到句子中间去。 */
+.pd-quote {
+  flex: 0 0 auto;
+  margin-top: 0.3em;
+  color: var(--text-faint);
+  opacity: 0.7;
+}
+
+.pd-note-quotes {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.45em;
+}
+
+/* 只有 0.8 度。再多就读作「排版歪了」而不是「随手写的」——
+   这一点倾斜是为了破掉「数字和文字都端端正正」的那股规整感。 */
+.pd-note-tilt .pd-note-text {
+  display: inline-block;
+  transform: rotate(-0.8deg);
+}
+
+/* ---- 链接 ---- */
+
+/* 上边距由插件写进 body 的变量提供，单位是「视口高度的百分比」。
+   用 vh 而不是固定 rem：要保证「往下滚才看得到」这件事在任何屏幕上成立 ——
+   固定值在小屏上会刚好露出来、在大屏上又不够远，两头都不对。 */
+.pd-links {
+  margin-top: var(--pd-links-gap, 55vh);
+  padding-bottom: 6rem;
+}
+
+/* 去列表符号。首页上任何装饰符号都是噪音 —— 链接自己就是内容。 */
+.pd-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 条目间距给得比常规大：留白是这里唯一的分隔手段。 */
+.pd-item {
+  margin: 0 0 1.75rem;
+}
+
+.pd-item:last-child {
+  margin-bottom: 0;
+}
+
+.pd-link {
+  color: var(--text-normal);
+  font-size: 1rem;
+  line-height: 1.5;
+  text-decoration: none;
+}
+
+.pd-link:hover {
+  color: var(--text-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
 /* ======================= 专注计时器（侧栏） ======================= */
 
 .pd-timer {
@@ -215,6 +312,14 @@
 
 .pd-about-sep {
   opacity: 0.5;
+}
+
+/* 设置页里几个小节上方的说明文字 */
+.pd-setting-note {
+  margin: -0.4em 0 1.2em;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 0.9em);
+  line-height: 1.55;
 }
 
 .sp-box {
