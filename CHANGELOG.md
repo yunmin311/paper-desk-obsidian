@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.1
+
+**The homepage group is back on, and there is now a test that would catch the failure
+which took it offline.**
+
+When 0.2.0 left the homepage blank, the fix was to default `homePath` to empty, which made
+the homepage opt-in. That was right as a default and wrong as an endpoint: it quietly threw
+away the reason the homepage is a note at all. A note is searchable, linkable and version
+controlled; writing a custom view instead gives all of that up to avoid two lines of CSS.
+
+So this restores it — in your config rather than in the defaults, which is the difference
+that matters. Nothing here claims a note you did not name; the setting is yours, and it
+leaves a trace you can look at.
+
+What made it safe to switch back on is a fourth test. Three suites were green while the
+homepage was blank, because none of them looked at what got rendered: the load test only
+proved the plugin did not throw and that the settings page had content. `tests/render.test.js`
+runs the three code blocks through their processors and requires that they produce DOM —
+a clock with digits, the line you wrote, the hub links — and pins the boundary that matters
+most, that the title tagging and forced reading mode touch the homepage leaf and no other.
+
+It was checked against the real failure before being trusted: with the clock's `onload`
+returning early, six cases fail. That is the 0.2.0 shape exactly.
+
+Two stubs fixed while writing it, both of which would have misattributed themselves to the
+plugin: `setAttribute("class", ...)` must reach `classList` or every SVG becomes invisible
+to the test, and `Component.load()` must call `onload()` or nothing renders at all.
+
 ## 0.3.0
 
 **Two things that were missing rather than broken: the clock could only tell time your way,
