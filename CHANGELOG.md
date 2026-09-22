@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.2.1
+
+**A hotfix for 0.2.0, and it fixes a default rather than a line of logic.**
+
+On a vault that already had this plugin, 0.2.0 left the homepage blank. The homepage
+itself was fine; what was wrong was that the plugin had decided to own a note nobody
+had asked it to own. `homePath` defaulted to `homepage.md`, so on first load after the
+update the plugin took over that note — hid its title, forced reading mode, opened it at
+startup — with no setting ever having been filled in. A default that claims one of your
+notes is not a default, it is an assumption, and this one was wrong.
+
+Three changes:
+
+*The homepage is now opt-in.* `homePath` defaults to empty and `openOnStartup` to off,
+so the homepage group stays off until you name a note. Empty makes `isHomePath()` false,
+which is what lets the whole group switch off as one — that path was already there and
+already tested, it just never got used by default.
+
+*Code-block registration moved to the very top of `onload`.* It used to sit after the
+status bar, the ticker and the stale-timer recovery. In the failure the registration was
+never reached while the title-hiding tag, applied earlier, had already landed — so the
+plugin looked half-loaded: title gone, nothing rendered. Registering first means nothing
+downstream can take the blocks down with it.
+
+*Two guards.* The status bar item is null-checked, since there is no status bar on mobile
+and calling `addClass` on nothing would throw and abort `onload` — a small cosmetic
+widget should not be able to stop your notes rendering. Forcing reading mode is now
+gated against re-entry, because `setMode` is asynchronous and an event fired mid-change
+can still read the old mode.
+
 ## 0.2.0
 
 **The homepage, folded in.** Until now this was two plugins, and that was the wrong shape.

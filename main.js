@@ -457,9 +457,18 @@ const DEFAULTS = {
   language: "auto",
   handwritingFont: DEFAULT_FONT_STACK,
 
-  // ---- 首页 ----
-  homePath: "homepage.md",
-  openOnStartup: true,
+  /* ---- 首页 ----
+
+     默认留空 = 首页那组行为整组关闭。这是刻意的，不是偷懒：
+     默认值一旦写成 "homepage.md"，插件装上就会去接管库里同名的一篇笔记 ——
+     藏掉它的标题、把它按回阅读模式、每次启动把它打开。使用者只是想要一枚时钟，
+     却发现自己那篇笔记被一个刚装的插件改了样子，这越界了，而且他无从得知是谁干的。
+     首页是「点开来要的」，不是「装上就有的」：留空由使用者自己填。
+
+     留空时 isHomePath() 恒为 false，打开 / 藏标题 / 强制阅读会一起失效，
+     不需要额外分支 —— 这也正是首页逻辑可以整组关掉的原因。 */
+  homePath: "",
+  openOnStartup: false,
   // "replace" | "newTab"
   openMode: "replace",
   /* 默认开：这两件事 Obsidian 自己都做不到，而它们正是「首页还像一篇笔记」的两处破绽。
@@ -1324,6 +1333,23 @@ class PaperDeskPlugin extends Plugin {
     bindI18n(this);
     const t = (k, v) => this.i18n.t(k, v);
 
+    /* 三个区块的注册刻意放在 onload 的最前面，早于下面任何可能失败的步骤。
+       顺序在这里是正确性的一部分，不是风格问题：一次事故里，onload 中途抛错
+       导致这三个注册没被执行，于是首页整篇空白 —— 而当时标题已经被藏掉了，
+       于是「插件加载了」和「内容没渲染」同时成立，看上去像渲染器坏了。
+       注册先做，即使后面某一步失败，笔记里的区块仍然照常渲染。 */
+    this.registerMarkdownCodeBlockProcessor(CLOCK_LANG, (source, el, ctx) => {
+      ctx.addChild(new ClockBlock(el));
+    });
+
+    this.registerMarkdownCodeBlockProcessor(LINKS_LANG, (source, el, ctx) => {
+      ctx.addChild(new LinksBlock(el, this));
+    });
+
+    this.registerMarkdownCodeBlockProcessor(NOTE_LANG, (source, el, ctx) => {
+      ctx.addChild(new NoteBlock(el, this, source));
+    });
+
     this.applyStyles();
     this.markHomeViews();
 
@@ -1340,7 +1366,11 @@ class PaperDeskPlugin extends Plugin {
     /* 状态栏条目只建一次，之后靠 CSS 类显隐。
        反复 addStatusBarItem() 会越加越多 —— 每次改设置都会多出一个。 */
     this.statusBarEl = this.addStatusBarItem();
-    this.statusBarEl.addClass(CSS_PREFIX + "statusbar");
+    /* 判空不是多疑：移动端没有状态栏，这里拿到的可能是空值。
+       直接 .addClass 会抛，进而中断整个 onload —— 一个排版用的小挂件
+       不该有本事让时钟和首页区块都渲染不出来。拿不到就跳过状态栏，
+       计时本身照常（面板和通知都不依赖它）。 */
+    if (this.statusBarEl) this.statusBarEl.addClass(CSS_PREFIX + "statusbar");
     this.setupTicker();
 
     /* 在 Obsidian 关闭期间把计时走完了的情况：只推进一个阶段就停下，
@@ -1361,18 +1391,6 @@ class PaperDeskPlugin extends Plugin {
     this.registerView(VIEW_TYPE, (leaf) => new PomodoroView(leaf, this));
 
     this.addRibbonIcon("timer", t("view.title"), () => this.activateView());
-
-    this.registerMarkdownCodeBlockProcessor(CLOCK_LANG, (source, el, ctx) => {
-      ctx.addChild(new ClockBlock(el));
-    });
-
-    this.registerMarkdownCodeBlockProcessor(LINKS_LANG, (source, el, ctx) => {
-      ctx.addChild(new LinksBlock(el, this));
-    });
-
-    this.registerMarkdownCodeBlockProcessor(NOTE_LANG, (source, el, ctx) => {
-      ctx.addChild(new NoteBlock(el, this, source));
-    });
 
     /* 首页那组行为靠这两个事件维持。
        file-open：活动文件变化（打开首页、从别处切回来）。
@@ -1597,6 +1615,20 @@ class PaperDeskPlugin extends Plugin {
     if (!shouldForcePreview(this.settings.forcePreview, this.settings.homePath, file && file.path)) {
       return;
     }
+    /* 重入闸门：setMode 是异步的，改完模式后可能再抛一次 file-open，
+       而那一刻 getMode() 也许还报着旧值。没有这道闸门就会变成
+       「切模式 → 触发事件 → 又切一次」的来回，最终把渲染线程钉住。
+       一次 file-open 只允许真正动手一次。 */
+    if (this._forcingPreview) return;
+    this._forcingPreview = true;
+    try {
+      this._forcePreviewNow();
+    } finally {
+      this._forcingPreview = false;
+    }
+  }
+
+  _forcePreviewNow() {
     const home = String(this.settings.homePath || "").trim();
 
     for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {

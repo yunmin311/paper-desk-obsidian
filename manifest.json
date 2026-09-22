@@ -1,7 +1,7 @@
 {
   "id": "paper-desk",
   "name": "Paper Desk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "minAppVersion": "1.4.0",
   "description": "A quiet clock for the top of a note, a pomodoro timer for the sidebar, and the homepage that ties them together.",
   "author": "yunmin311",
