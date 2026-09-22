@@ -97,6 +97,12 @@ function makeEl(tag, o) {
 }
 
 const bodyEl = new El("body");
+let nextFrameId = 1;
+let animationFrames = [];
+function flushAnimationFrames() {
+  const queued = animationFrames.splice(0);
+  for (const item of queued) item.callback();
+}
 globalThis.document = {
   body: bodyEl,
   documentElement: { lang: "zh", classList: bodyEl.classList },
@@ -116,8 +122,14 @@ globalThis.window = {
   clearTimeout: () => {},
   setInterval: () => 0,
   clearInterval: () => {},
-  requestAnimationFrame: () => 0,
-  cancelAnimationFrame: () => {},
+  requestAnimationFrame: (callback) => {
+    const id = nextFrameId++;
+    animationFrames.push({ id, callback });
+    return id;
+  },
+  cancelAnimationFrame: (id) => {
+    animationFrames = animationFrames.filter((item) => item.id !== id);
+  },
   // i18n.js 的 resolveLanguage 会读它。没有这个桩，语言探测就走了
   // documentElement.lang 那条路 —— 能跑，但测的不是同一条路径。
   localStorage: { getItem: () => null, setItem: () => {} },
@@ -151,12 +163,35 @@ function makeView(viewPath) {
       get calls() { return rerenders; },
     },
     getMode: () => mode,
-    // 真机的 setMode 是异步的 —— 这里同步生效，形状保持一致
-    setMode: (m) => { mode = m; return Promise.resolve(); },
+    /* Obsidian 1.13.7 的 MarkdownView.setMode 接受内部 Mode 对象，不接受
+       "preview" 字符串。插件一旦碰它就会破坏 currentMode。 */
+    setMode: () => { throw new Error("MarkdownView.setMode must not be called with a string"); },
+    _setModeForTest: (m) => { mode = m; },
+  };
+}
+
+function makeLeaf(view) {
+  let calls = 0;
+  return {
+    view,
+    tabHeaderEl: new El("div"),
+    getViewState() {
+      return {
+        type: "markdown",
+        state: { file: view.file && view.file.path, mode: view.getMode(), source: false },
+      };
+    },
+    setViewState(nextState) {
+      calls++;
+      view._setModeForTest(nextState.state.mode);
+      return Promise.resolve();
+    },
+    get setViewStateCalls() { return calls; },
   };
 }
 
 let leaves = [];
+const workspaceEvents = {};
 
 const api = {
   /* Component.load() 在真机里触发 onload()。缺了这一步，所有 MarkdownRenderChild
@@ -217,12 +252,22 @@ const app = {
       (app.__files || []).find((f) => f.path === p) || null,
   },
   metadataCache: { getFileCache: (f) => (app.__caches || {})[f.path] || null },
+  commands: {
+    executeCommandById: (id) => {
+      (app.__commands = app.__commands || []).push(id);
+      return true;
+    },
+  },
   workspace: {
-    getActiveFile: () => null,
+    getActiveFile: () => app.__activeFile || null,
+    getLastOpenFiles: () => app.__lastOpenFiles || [],
     getLeavesOfType: (t) => (t === "markdown" ? leaves : []),
     getRightLeaf: () => ({ view: null }),
     getLeaf: () => ({ view: null, openFile: async () => {} }),
-    on: () => ({}),
+    on: (name, callback) => {
+      workspaceEvents[name] = callback;
+      return {};
+    },
     onLayoutReady: (cb) => { app.__layoutReady = cb; },
     revealLeaf: async () => {},
     openLinkText: async () => {},
@@ -281,7 +326,20 @@ globalThis.Date = class extends RealDate {
 };
 
 (async () => {
-  const plugin = new PluginClass(app, { id: "paper-desk", version: "0.3.0" });
+  const interruptedPlugin = new PluginClass(app, { id: "paper-desk", version: "0.4.0" });
+  interruptedPlugin.loadData = async () => { throw new Error("simulated settings failure"); };
+  try {
+    await interruptedPlugin.onload();
+  } catch (error) {
+    // 这里故意让 onload 中断；要断言的是中断前已经完成了哪些注册。
+  }
+  eq(
+    "onload 后续步骤失败时全部首页代码块仍已注册",
+    (interruptedPlugin._codeBlocks || []).map(([lang]) => lang).sort(),
+    ["clock", "home-actions", "home-date", "home-links", "home-note", "home-pins", "home-resume"]
+  );
+
+  const plugin = new PluginClass(app, { id: "paper-desk", version: "0.4.0" });
   await plugin.onload();
 
   const blocks = new Map((plugin._codeBlocks || []).map(([l, fn]) => [l, fn]));
@@ -296,11 +354,15 @@ globalThis.Date = class extends RealDate {
     return el;
   }
 
-  /* ============ 1. 三个区块必须真的渲染出东西 ============ */
+  /* ============ 1. 首页区块必须真的渲染出东西 ============ */
 
   ok("clock 区块已注册", blocks.has("clock"));
   ok("home-note 区块已注册", blocks.has("home-note"));
   ok("home-links 区块已注册", blocks.has("home-links"));
+  ok("home-date 区块已注册", blocks.has("home-date"));
+  ok("home-resume 区块已注册", blocks.has("home-resume"));
+  ok("home-actions 区块已注册", blocks.has("home-actions"));
+  ok("home-pins 区块已注册", blocks.has("home-pins"));
 
   const clockEl = renderBlock("clock", "");
   const timeRow = clockEl && find(clockEl, "pd-clock-time");
@@ -330,6 +392,8 @@ globalThis.Date = class extends RealDate {
     { path: "year2 final2/_Year2 Final Index.md", basename: "_Year2 Final Index", extension: "md" },
     { path: "English Learning/_English Learning Hub.md", basename: "_English Learning Hub", extension: "md" },
     { path: "clutter/some-note.md", basename: "some-note", extension: "md" },
+    { path: "inbox.md", basename: "inbox", extension: "md" },
+    { path: "BASE.md", basename: "BASE", extension: "md" },
   ];
   app.__caches = {};
   plugin.settings.rules = ["*Index*", "*Hub*"];
@@ -342,17 +406,57 @@ globalThis.Date = class extends RealDate {
   ok("home-links 不含首页自己", !!listEl && !text(listEl).includes("homepage"));
   ok("home-links 收的是 hub 笔记", !!listEl && text(listEl).includes("_Year2 Final Index"));
 
+  const dateEl = renderBlock("home-date", "");
+  const dateLine = dateEl && find(dateEl, "pd-date");
+  ok(
+    "home-date 是轻量日期落款",
+    !!dateLine && /2026/.test(text(dateLine)) && /9/.test(text(dateLine)) && /22/.test(text(dateLine)),
+    dateLine ? `实际：${text(dateLine)}` : "(没有日期)"
+  );
+
+  app.__lastOpenFiles = ["homepage.md", "clutter/some-note.md", "inbox.md"];
+  const resumeEl = renderBlock("home-resume", "");
+  const resumeLink = resumeEl && find(resumeEl, "pd-resume-link");
+  ok("home-resume 只显示一个继续入口", !!resumeLink && text(resumeLink).includes("some-note"));
+  eq("home-resume 指向最近的非首页笔记", resumeLink && resumeLink.attrs.href, "clutter/some-note.md");
+
+  app.__commands = [];
+  const actionsEl = renderBlock("home-actions", "");
+  const actions = actionsEl && find(actionsEl, "pd-actions");
+  eq("home-actions 只有三个轻动作", actions ? actions.children.length : -1, 3);
+  for (const action of actions ? actions.children : []) {
+    if (typeof action.onclick === "function") action.onclick({ preventDefault() {} });
+  }
+  eq(
+    "三个轻动作走现有命令，不自建第二套流程",
+    app.__commands,
+    ["file-explorer:new-file", "daily-notes", "paper-desk:open-timer"]
+  );
+
+  const pinsEl = renderBlock(
+    "home-pins",
+    "# 一行一个 Obsidian 链接\n[[inbox|收件箱]]\n[[BASE]]"
+  );
+  const pins = pinsEl && find(pinsEl, "pd-pins");
+  eq("home-pins 渲染两条手动入口", pins ? pins.children.length : -1, 2);
+  ok("home-pins 使用别名并忽略注释", !!pins && text(pins).includes("收件箱") && !text(pins).includes("一行一个"));
+
   /* ============ 2. 藏标题：只打在显示首页的那一格 ============ */
 
   const homeView = makeView("homepage.md");
   const otherView = makeView("clutter/some-note.md");
   const emptyView = makeView(null); // 空的那一格：新标签、还没打开文件
-  leaves = [{ view: homeView }, { view: otherView }, { view: emptyView }];
+  const homeLeaf = makeLeaf(homeView);
+  const otherLeaf = makeLeaf(otherView);
+  const emptyLeaf = makeLeaf(emptyView);
+  leaves = [homeLeaf, otherLeaf, emptyLeaf];
 
   plugin.settings.hideTitle = true;
   plugin.markHomeViews();
   ok("首页那一格被打上标记", homeView.containerEl.classList.contains("pd-is-home"));
+  ok("首页标签页得到独立居中标记", homeLeaf.tabHeaderEl.classList.contains("pd-is-home-tab"));
   ok("其他笔记那一格没被打标记", !otherView.containerEl.classList.contains("pd-is-home"));
+  ok("其他标签页没有居中标记", !otherLeaf.tabHeaderEl.classList.contains("pd-is-home-tab"));
   ok("空那一格没被打标记", !emptyView.containerEl.classList.contains("pd-is-home"));
 
   // 换首页：旧的那格必须把标记退回去，否则分屏时会两边都被藏掉
@@ -372,29 +476,91 @@ globalThis.Date = class extends RealDate {
   plugin.settings.homePath = "homepage.md";
   plugin.markHomeViews();
   ok("关掉藏标题就不打标记（即使路径填着）", !homeView.containerEl.classList.contains("pd-is-home"));
+  ok("不藏标题时首页标签仍保持居中标记", homeLeaf.tabHeaderEl.classList.contains("pd-is-home-tab"));
   plugin.settings.hideTitle = true;
 
   /* ============ 4. 强制阅读：同样只动首页 ============ */
 
   plugin.settings.forcePreview = true;
   plugin.settings.homePath = "homepage.md";
-  homeView.setMode("source");
-  otherView.setMode("source");
-  emptyView.setMode("source");
+  homeView._setModeForTest("source");
+  otherView._setModeForTest("source");
+  emptyView._setModeForTest("source");
 
-  plugin.enforcePreview({ path: "homepage.md" });
+  await plugin.enforcePreview({ path: "homepage.md" });
   eq("到达首页落到阅读模式", homeView.getMode(), "preview");
   eq("其他笔记的模式没被动过", otherView.getMode(), "source");
   eq("空那一格的模式没被动过", emptyView.getMode(), "source");
 
-  plugin.enforcePreview({ path: "clutter/some-note.md" });
+  await plugin.enforcePreview({ path: "clutter/some-note.md" });
   eq("去别的笔记时那一格不被强制阅读", otherView.getMode(), "source");
   eq("首页那一格保持刚才的阅读模式", homeView.getMode(), "preview");
 
-  homeView.setMode("source");
+  homeView._setModeForTest("source");
   plugin.settings.forcePreview = false;
-  plugin.enforcePreview({ path: "homepage.md" });
+  await plugin.enforcePreview({ path: "homepage.md" });
   eq("关掉强制阅读后不再切模式", homeView.getMode(), "source");
+
+  /* 真机的 leaf.setViewState 在 Promise 落定前仍可能让 getMode() 报 source，
+     期间又触发一次 file-open。重入保护必须覆盖完整的异步窗口。 */
+  const asyncHomeView = makeView("homepage.md");
+  const asyncHomeLeaf = makeLeaf(asyncHomeView);
+  const setViewStateImmediately = asyncHomeLeaf.setViewState.bind(asyncHomeLeaf);
+  const pendingModeChanges = [];
+  let asyncSetViewStateCalls = 0;
+  asyncHomeLeaf.setViewState = (state, options) => {
+    asyncSetViewStateCalls++;
+    return new Promise((resolve) => {
+      pendingModeChanges.push(() => {
+        setViewStateImmediately(state, options).then(resolve);
+      });
+    });
+  };
+  leaves = [asyncHomeLeaf];
+  plugin.settings.forcePreview = true;
+
+  const firstForce = plugin.enforcePreview({ path: "homepage.md" });
+  plugin.enforcePreview({ path: "homepage.md" });
+  eq("setViewState 未落定时的重复 file-open 不会再次切模式", asyncSetViewStateCalls, 1);
+
+  for (const settle of pendingModeChanges.splice(0)) settle();
+  await firstForce;
+  asyncHomeView._setModeForTest("source");
+  const secondForce = plugin.enforcePreview({ path: "homepage.md" });
+  eq("上一次 setViewState 落定后允许下一次到达首页", asyncSetViewStateCalls, 2);
+  for (const settle of pendingModeChanges.splice(0)) settle();
+  await secondForce;
+
+  /* file-open 在真机里可能先于 leaf.view.file 更新。事件当场处理会看见旧文件，
+     于是“从别处回到首页”漏掉；下一帧再处理才是稳定状态。 */
+  const arrivingView = makeView("clutter/some-note.md");
+  const arrivingLeaf = makeLeaf(arrivingView);
+  arrivingView._setModeForTest("source");
+  leaves = [arrivingLeaf];
+  app.__activeFile = { path: "homepage.md" };
+  workspaceEvents["file-open"]({ path: "homepage.md" });
+  arrivingView.file = { path: "homepage.md", basename: "homepage", extension: "md" };
+  flushAnimationFrames();
+  await Promise.resolve();
+  await Promise.resolve();
+  eq("file-open 早于视图更新时仍会在下一帧进入阅读模式", arrivingView.getMode(), "preview");
+
+  /* 真机比这个更慢：file-open 之后第一帧里 leaf.view 仍可能是上一篇。
+     生产代码如果只等固定一帧，这条就会保持 source，正是本次截图里的回归。 */
+  const slowlyArrivingView = makeView("clutter/some-note.md");
+  const slowlyArrivingLeaf = makeLeaf(slowlyArrivingView);
+  slowlyArrivingView._setModeForTest("source");
+  leaves = [slowlyArrivingLeaf];
+  app.__activeFile = { path: "homepage.md" };
+  workspaceEvents["file-open"]({ path: "homepage.md" });
+  flushAnimationFrames();
+  await Promise.resolve();
+  eq("首页视图尚未就位时不会误改上一页", slowlyArrivingView.getMode(), "source");
+  slowlyArrivingView.file = { path: "homepage.md", basename: "homepage", extension: "md" };
+  flushAnimationFrames();
+  await Promise.resolve();
+  await Promise.resolve();
+  eq("首页晚于第一帧就位时仍会进入阅读模式", slowlyArrivingView.getMode(), "preview");
 
   /* ============ 5. 12 小时制真的落到界面上 ============ */
 

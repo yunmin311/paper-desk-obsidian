@@ -37,9 +37,11 @@ Both are scoped to the homepage and never global. **Leave the homepage path empt
 whole group switches off** — you are left with a clock and a timer that touch no note of
 yours at all.
 
-Two blocks go with it. `home-note` shows exactly what you write in it — **one line means a
-fixed line, several means it changes once a day** — and counts nothing. `home-links` builds
-its list from rules, so renaming or adding a note updates the homepage for you.
+Six small blocks can go with it. `home-note` shows exactly what you write in it — **one line
+means a fixed line, several means it changes once a day** — and `home-links` builds its list
+from rules. Four optional helpers stay below that main idea: a date byline, one link back to
+the last note, three text actions, and a short row of hand-picked links. None adds a counter,
+card, or dashboard statistic.
 
 ## Design notes
 
@@ -85,7 +87,7 @@ Insert a clock with the command **Paper Desk: Insert a clock block**, or type it
 The block takes no options. Open the timer from the ribbon icon, or with
 **Paper Desk: Open the focus timer**.
 
-The homepage uses two blocks. Insert them with **Insert a homepage line block** and
+The two main homepage blocks can be inserted with **Insert a homepage line block** and
 **Insert a homepage link block**:
 
 ````
@@ -102,6 +104,29 @@ Take one thing to the end today
 `home-note` shows what you write in it: one line is a fixed line, several lines rotate once a
 day. Lines starting with `#` are skipped, so a remark above the sentences stays off the page.
 `home-links` takes no options — the rules live in settings.
+
+Four quieter helpers can be typed by hand wherever they fit your homepage:
+
+````
+```home-date
+```
+
+```home-resume
+```
+
+```home-actions
+```
+
+```home-pins
+[[inbox|Inbox]]
+[[Projects|Projects]]
+```
+````
+
+`home-resume` shows only the most recent non-homepage note. `home-actions` stays to three
+plain-text actions: new note, today's note, and focus. `home-pins` accepts one Obsidian wiki
+link per line; `#` comments and blank lines are ignored. Leave any helper out and it leaves
+no placeholder behind.
 
 ### Settings
 
@@ -189,8 +214,9 @@ MIT — see [LICENSE](LICENSE).
 两者都只作用于首页，绝不全局。**把首页路径留空，这一整组行为就完全关掉** —— 那时它只是一枚
 时钟加一个计时器，不碰你的任何一篇笔记。
 
-配套的还有两个代码块：`home-note` 显示你写进去的东西（**一行就固定，多行就每天换一句**），
-不计数、不累积；`home-links` 按规则生成链接列表，笔记改名或新增都会自己跟上。
+配套的六个小区块都只做「位置」，不做「量」。`home-note` 显示你写进去的东西（**一行就固定，
+多行就每天换一句**），`home-links` 按规则生成链接列表；另外四个可选区块只放日期落款、最近一篇
+非首页笔记、三个文字动作和一小排手动固定入口。没有卡片、计数或仪表盘统计。
 
 ### 设计约定
 
@@ -231,7 +257,7 @@ MIT — see [LICENSE](LICENSE).
 
 代码块不接受任何参数。计时器从左侧功能区的图标打开，或用命令 **Paper Desk: 打开专注计时器**。
 
-首页用另外两个代码块，命令是 **插入首页手写句区块** 与 **插入首页链接区块**：
+两个主要的首页区块可以用命令 **插入首页手写句区块** 与 **插入首页链接区块**：
 
 ````
 ```home-note
@@ -246,6 +272,28 @@ MIT — see [LICENSE](LICENSE).
 
 `home-note` 显示的就是你写进去的东西：一行固定、多行每天换一句。以 `#` 开头的行会被忽略，
 所以可以在句子上面给自己留个备注，它不会显示到页面上。`home-links` 不接受参数 —— 规则在设置页里。
+
+四个更轻的辅助区块按需要手写即可：
+
+````
+```home-date
+```
+
+```home-resume
+```
+
+```home-actions
+```
+
+```home-pins
+[[inbox|收件箱]]
+[[Projects|项目]]
+```
+````
+
+`home-resume` 只显示最近打开的一篇非首页笔记；`home-actions` 只有新建笔记、今日日记、开始专注
+三个文字动作；`home-pins` 每行接受一个 Obsidian 双链，也会忽略空行与 `#` 注释。不写某个区块，
+页面上就不会留下占位。
 
 ### 设置
 

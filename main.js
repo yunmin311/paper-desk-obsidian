@@ -87,6 +87,11 @@ const OWN = {
     "command.insertLinks": "插入首页链接区块",
     "command.insertNote": "插入首页手写句区块",
 
+    "home.resume": "继续",
+    "home.action.new": "新建笔记",
+    "home.action.daily": "今日日记",
+    "home.action.focus": "开始专注",
+
     /* 阶段名。这三个词会用手写字体渲染 —— 它们是全插件唯一用手写体的地方，
        刻意选短词：手写体在长句上可读性会塌。 */
     "phase.work": "专注",
@@ -212,6 +217,11 @@ const OWN = {
     "command.openHome": "Open the homepage",
     "command.insertLinks": "Insert a homepage link block",
     "command.insertNote": "Insert a homepage line block",
+
+    "home.resume": "Continue",
+    "home.action.new": "New note",
+    "home.action.daily": "Today",
+    "home.action.focus": "Focus",
 
     "phase.work": "Focus",
     "phase.short": "Short break",
@@ -457,6 +467,10 @@ function renderSponsor(parent, t) {
 const CLOCK_LANG = "clock";
 const LINKS_LANG = "home-links";
 const NOTE_LANG = "home-note";
+const DATE_LANG = "home-date";
+const RESUME_LANG = "home-resume";
+const ACTIONS_LANG = "home-actions";
+const PINS_LANG = "home-pins";
 const VIEW_TYPE = "paper-desk-timer";
 const CSS_PREFIX = "pd-";
 
@@ -760,6 +774,31 @@ function shouldForcePreview(force, homePath, filePath) {
   return !!force && isHomePath(homePath, filePath);
 }
 
+function formatHomeDate(date, language) {
+  const locale = language === "zh" ? "zh-CN" : "en-US";
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  }).format(date instanceof Date ? date : new Date());
+}
+
+function parsePinnedLinks(source) {
+  const out = [];
+  for (const raw of String(source == null ? "" : source).split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = line.match(/^\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]$/);
+    if (!match) continue;
+    const path = match[1].trim();
+    if (!path) continue;
+    const fallback = path.split("/").pop().replace(/\.md$/i, "");
+    out.push({ path, title: String(match[2] || fallback).trim() || fallback });
+  }
+  return out;
+}
+
 /* ============================ 时钟 ============================ */
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -941,6 +980,108 @@ class LinksBlock extends MarkdownRenderChild {
       a.onclick = (e) => {
         e.preventDefault();
         this.plugin.app.workspace.openLinkText(item.file.path, "", false);
+      };
+    }
+  }
+}
+
+class DateBlock extends MarkdownRenderChild {
+  constructor(containerEl, plugin) {
+    super(containerEl);
+    this.plugin = plugin;
+  }
+
+  onload() {
+    this.containerEl.createDiv({
+      cls: CSS_PREFIX + "date",
+      text: formatHomeDate(new Date(), this.plugin.i18n.resolved),
+    });
+  }
+}
+
+class ResumeBlock extends MarkdownRenderChild {
+  constructor(containerEl, plugin) {
+    super(containerEl);
+    this.plugin = plugin;
+  }
+
+  onload() {
+    const workspace = this.plugin.app.workspace;
+    if (!workspace || typeof workspace.getLastOpenFiles !== "function") return;
+    const home = String(this.plugin.settings.homePath || "").trim();
+    let file = null;
+    for (const path of workspace.getLastOpenFiles() || []) {
+      if (!path || path === home) continue;
+      const candidate = this.plugin.app.vault.getAbstractFileByPath(path);
+      if (candidate && candidate.extension === "md") {
+        file = candidate;
+        break;
+      }
+    }
+    if (!file) return;
+
+    const cache = this.plugin.app.metadataCache.getFileCache(file);
+    const title = displayNameFor(file.basename, cache && cache.frontmatter);
+    const root = this.containerEl.createDiv({ cls: CSS_PREFIX + "resume" });
+    root.createSpan({ cls: CSS_PREFIX + "resume-label", text: this.plugin.i18n.t("home.resume") });
+    const link = root.createEl("a", {
+      cls: CSS_PREFIX + "resume-link",
+      text: title,
+      href: file.path,
+    });
+    link.onclick = (event) => {
+      event.preventDefault();
+      workspace.openLinkText(file.path, "", false);
+    };
+  }
+}
+
+class ActionsBlock extends MarkdownRenderChild {
+  constructor(containerEl, plugin) {
+    super(containerEl);
+    this.plugin = plugin;
+  }
+
+  onload() {
+    const root = this.containerEl.createDiv({ cls: CSS_PREFIX + "actions" });
+    const actions = [
+      ["home.action.new", "file-explorer:new-file"],
+      ["home.action.daily", "daily-notes"],
+      ["home.action.focus", "paper-desk:open-timer"],
+    ];
+    for (const [labelKey, commandId] of actions) {
+      const button = root.createEl("button", {
+        cls: CSS_PREFIX + "action",
+        text: this.plugin.i18n.t(labelKey),
+      });
+      button.onclick = (event) => {
+        event.preventDefault();
+        this.plugin.app.commands.executeCommandById(commandId);
+      };
+    }
+  }
+}
+
+class PinsBlock extends MarkdownRenderChild {
+  constructor(containerEl, plugin, source) {
+    super(containerEl);
+    this.plugin = plugin;
+    this.source = source;
+  }
+
+  onload() {
+    const items = parsePinnedLinks(this.source);
+    if (!items.length) return;
+    const root = this.containerEl.createDiv({ cls: CSS_PREFIX + "pins" });
+    for (const item of items) {
+      const link = root.createEl("a", {
+        cls: CSS_PREFIX + "pin",
+        text: item.title,
+        href: item.path,
+      });
+      link.onclick = (event) => {
+        event.preventDefault();
+        this.plugin.app.workspace.openLinkText(item.path, "", false);
       };
     }
   }
@@ -1401,19 +1542,8 @@ class PaperDeskSettingTab extends PluginSettingTab {
 
 class PaperDeskPlugin extends Plugin {
   async onload() {
-    const data = (await this.loadData()) || {};
-    this.settings = Object.assign({}, DEFAULTS, data);
-    delete this.settings.timer;
-    this.timer = Object.assign({}, TIMER_DEFAULTS, data.timer || {});
-
-    bindI18n(this);
-    const t = (k, v) => this.i18n.t(k, v);
-
-    /* 三个区块的注册刻意放在 onload 的最前面，早于下面任何可能失败的步骤。
-       顺序在这里是正确性的一部分，不是风格问题：一次事故里，onload 中途抛错
-       导致这三个注册没被执行，于是首页整篇空白 —— 而当时标题已经被藏掉了，
-       于是「插件加载了」和「内容没渲染」同时成立，看上去像渲染器坏了。
-       注册先做，即使后面某一步失败，笔记里的区块仍然照常渲染。 */
+    /* 三个区块的注册必须是 onload 的第一步。它们不依赖设置或 i18n，
+       所以后续任何初始化失败都不能连带让笔记正文变成空白。 */
     this.registerMarkdownCodeBlockProcessor(CLOCK_LANG, (source, el, ctx) => {
       ctx.addChild(new ClockBlock(el, this));
     });
@@ -1425,6 +1555,30 @@ class PaperDeskPlugin extends Plugin {
     this.registerMarkdownCodeBlockProcessor(NOTE_LANG, (source, el, ctx) => {
       ctx.addChild(new NoteBlock(el, this, source));
     });
+
+    this.registerMarkdownCodeBlockProcessor(DATE_LANG, (source, el, ctx) => {
+      ctx.addChild(new DateBlock(el, this));
+    });
+
+    this.registerMarkdownCodeBlockProcessor(RESUME_LANG, (source, el, ctx) => {
+      ctx.addChild(new ResumeBlock(el, this));
+    });
+
+    this.registerMarkdownCodeBlockProcessor(ACTIONS_LANG, (source, el, ctx) => {
+      ctx.addChild(new ActionsBlock(el, this));
+    });
+
+    this.registerMarkdownCodeBlockProcessor(PINS_LANG, (source, el, ctx) => {
+      ctx.addChild(new PinsBlock(el, this, source));
+    });
+
+    const data = (await this.loadData()) || {};
+    this.settings = Object.assign({}, DEFAULTS, data);
+    delete this.settings.timer;
+    this.timer = Object.assign({}, TIMER_DEFAULTS, data.timer || {});
+
+    bindI18n(this);
+    const t = (k, v) => this.i18n.t(k, v);
 
     this.applyStyles();
     this.markHomeViews();
@@ -1473,8 +1627,7 @@ class PaperDeskPlugin extends Plugin {
        layout-change：新建标签、分屏、把首页拖到另一个面板。只听一个是漏的。 */
     this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
-        this.markHomeViews();
-        this.enforcePreview(file);
+        this.scheduleHomeArrival(file);
       })
     );
     this.registerEvent(
@@ -1543,6 +1696,8 @@ class PaperDeskPlugin extends Plugin {
   }
 
   onunload() {
+    if (this._homeArrivalFrame) window.cancelAnimationFrame(this._homeArrivalFrame);
+    this._homeArrivalFrame = 0;
     // 视图由 Obsidian 按 registerView 回收；这里只需把样式变量撤掉，保证禁用后界面复原。
     document.body.style.removeProperty("--pd-handwriting");
     document.body.style.removeProperty("--pd-note-size");
@@ -1552,6 +1707,7 @@ class PaperDeskPlugin extends Plugin {
       if (leaf.view && leaf.view.containerEl) {
         leaf.view.containerEl.classList.remove(CSS_PREFIX + "is-home");
       }
+      if (leaf.tabHeaderEl) leaf.tabHeaderEl.classList.remove(CSS_PREFIX + "is-home-tab");
     }
   }
 
@@ -1666,14 +1822,49 @@ class PaperDeskPlugin extends Plugin {
    */
   markHomeViews() {
     const home = String(this.settings.homePath || "").trim();
-    const on = !!this.settings.hideTitle && !!home;
 
     for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
       const view = leaf.view;
       if (!view || !view.containerEl) continue;
-      const isHome = on && !!view.file && isHomePath(home, view.file.path);
-      view.containerEl.classList.toggle(CSS_PREFIX + "is-home", isHome);
+      const isHome = !!home && !!view.file && isHomePath(home, view.file.path);
+      view.containerEl.classList.toggle(
+        CSS_PREFIX + "is-home",
+        !!this.settings.hideTitle && isHome
+      );
+      if (leaf.tabHeaderEl) {
+        leaf.tabHeaderEl.classList.toggle(CSS_PREFIX + "is-home-tab", isHome);
+      }
     }
+  }
+
+  scheduleHomeArrival(file) {
+    if (this._homeArrivalFrame) window.cancelAnimationFrame(this._homeArrivalFrame);
+    const expectedPath = file && file.path;
+    let framesLeft = 8;
+
+    const settle = () => {
+      this._homeArrivalFrame = 0;
+      this.markHomeViews();
+
+      const viewIsReady = !!expectedPath && this.app.workspace
+        .getLeavesOfType("markdown")
+        .some((leaf) => leaf.view && leaf.view.file && leaf.view.file.path === expectedPath);
+
+      if (viewIsReady || !expectedPath) {
+        this.enforcePreview(file);
+        return;
+      }
+
+      /* file-open 可能早于 leaf.view.file 多帧。不要赌固定延迟：只要活动文件
+         仍是这次事件的目标，就继续等实际视图就位；用户已经切走则立即停。 */
+      const active = typeof this.app.workspace.getActiveFile === "function"
+        ? this.app.workspace.getActiveFile()
+        : null;
+      if ((active && active.path !== expectedPath) || --framesLeft <= 0) return;
+      this._homeArrivalFrame = window.requestAnimationFrame(settle);
+    };
+
+    this._homeArrivalFrame = window.requestAnimationFrame(settle);
   }
 
   /**
@@ -1684,10 +1875,12 @@ class PaperDeskPlugin extends Plugin {
    * 挂在 file-open 上正好 —— 它只在活动文件变化时触发，
    * 而在同一篇笔记里切换模式不会触发它。
    *
-   * 用 setMode 前先确认它存在：这是 MarkdownView 上较新的方法，
-   * 老版本没有。缺了就静默跳过，不能因为排版偏好让整个插件挂掉。
+   * 不能调用 MarkdownView.setMode("preview")：Obsidian 1.13.7 的这个内部方法
+   * 接受的是 Mode 对象，传字符串会把 currentMode 破坏掉，随后 resize / 打开文件
+   * 都会在 currentMode.onResize / getEphemeralState 上崩溃。这里走 Obsidian 自己
+   * 切换阅读模式所用的公开路径：leaf.getViewState() → leaf.setViewState()。
    */
-  enforcePreview(file) {
+  async enforcePreview(file) {
     if (!shouldForcePreview(this.settings.forcePreview, this.settings.homePath, file && file.path)) {
       return;
     }
@@ -1698,22 +1891,32 @@ class PaperDeskPlugin extends Plugin {
     if (this._forcingPreview) return;
     this._forcingPreview = true;
     try {
-      this._forcePreviewNow();
+      await this._forcePreviewNow();
     } finally {
       this._forcingPreview = false;
     }
   }
 
-  _forcePreviewNow() {
+  async _forcePreviewNow() {
     const home = String(this.settings.homePath || "").trim();
+    const modeChanges = [];
 
     for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
       const view = leaf.view;
       if (!view || !view.file || view.file.path !== home) continue;
-      if (typeof view.getMode !== "function" || typeof view.setMode !== "function") continue;
+      if (typeof view.getMode !== "function") continue;
       if (view.getMode() !== "source") continue;
-      view.setMode("preview");
+      if (typeof leaf.getViewState !== "function" || typeof leaf.setViewState !== "function") continue;
+
+      const currentState = leaf.getViewState();
+      if (!currentState || !currentState.state) continue;
+      const nextState = Object.assign({}, currentState, {
+        state: Object.assign({}, currentState.state, { mode: "preview" }),
+      });
+      modeChanges.push(leaf.setViewState(nextState));
     }
+
+    await Promise.all(modeChanges);
   }
 
   /** 按规则收集要列在首页上的笔记。

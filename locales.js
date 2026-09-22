@@ -48,6 +48,11 @@ const OWN = {
     "command.insertLinks": "插入首页链接区块",
     "command.insertNote": "插入首页手写句区块",
 
+    "home.resume": "继续",
+    "home.action.new": "新建笔记",
+    "home.action.daily": "今日日记",
+    "home.action.focus": "开始专注",
+
     /* 阶段名。这三个词会用手写字体渲染 —— 它们是全插件唯一用手写体的地方，
        刻意选短词：手写体在长句上可读性会塌。 */
     "phase.work": "专注",
@@ -173,6 +178,11 @@ const OWN = {
     "command.openHome": "Open the homepage",
     "command.insertLinks": "Insert a homepage link block",
     "command.insertNote": "Insert a homepage line block",
+
+    "home.resume": "Continue",
+    "home.action.new": "New note",
+    "home.action.daily": "Today",
+    "home.action.focus": "Focus",
 
     "phase.work": "Focus",
     "phase.short": "Short break",

@@ -145,12 +145,126 @@
   display: none;
 }
 
+/* 首页保留原生标签标题与关闭按钮，但标题的中心不再被右侧按钮挤偏。
+   只标记首页对应的 tabHeaderEl，绝不改变其他标签页。 */
+.pd-is-home-tab .workspace-tab-header-inner {
+  position: relative;
+  justify-content: center;
+}
+
+.pd-is-home-tab .workspace-tab-header-inner-title {
+  flex: 0 1 auto;
+  margin-inline: 2rem;
+  text-align: center;
+}
+
+.pd-is-home-tab .workspace-tab-header-inner-close-button {
+  position: absolute;
+  right: var(--size-2-2, 8px);
+}
+
+/* ---- 首页辅助带 ----
+   日期、继续入口、轻动作与固定入口都比手写句低一个层级。动作只借一层
+   极淡的纸签边界说明“这里可点”，没有阴影、图标或第二套装饰。 */
+
+.pd-date {
+  margin: -2.2rem auto 0;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller, 0.8rem);
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.pd-resume,
+.pd-actions,
+.pd-pins {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 0.85rem);
+  line-height: 1.4;
+}
+
+.pd-resume {
+  gap: 0.65em;
+  margin: 3.5rem auto 0;
+  max-width: min(40rem, 88vw);
+}
+
+.pd-resume-label {
+  color: var(--text-faint);
+}
+
+.pd-resume-link,
+.pd-pin {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.pd-resume-link {
+  display: inline-block;
+  min-width: 0;
+  max-width: min(32rem, 72vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pd-resume-link:hover,
+.pd-pin:hover {
+  color: var(--text-normal);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+.pd-actions {
+  gap: 0.75rem;
+  margin-top: 1.4rem;
+}
+
+.pd-pins {
+  gap: 1.2em;
+  margin-top: 1.65rem;
+}
+
+/* 两层 class 是有意的：Obsidian 主题常用 button:not(...) 选择器，单个
+   .pd-action 权重不够，会重新长成带阴影的系统按钮。 */
+.pd-actions .pd-action {
+  appearance: none;
+  min-height: 0;
+  padding: 0.48rem 0.82rem;
+  border: 1px solid color-mix(in srgb, var(--text-faint) 42%, transparent);
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--background-primary) 94%, var(--text-normal) 6%);
+  box-shadow: none;
+  color: var(--text-muted);
+  font: inherit;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.pd-actions .pd-action:hover,
+.pd-actions .pd-action:focus-visible {
+  border-color: color-mix(in srgb, var(--text-muted) 58%, transparent);
+  background: color-mix(in srgb, var(--background-primary) 89%, var(--text-normal) 11%);
+  color: var(--text-normal);
+  box-shadow: none;
+}
+
+.pd-actions .pd-action:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
 /* ---- 手写句 ---- */
 
-/* 上边距刻意很小：时钟自己带着下留白，这里再叠一层就会把两者推开成两块。
-   手写句要读作「附在时钟上的一句话」，不是另一个独立区块。 */
+/* 日期是时钟的落款，手写句则是今天真正要读的一行；两者之间多留一口气，
+   避免日期、句子、继续入口全部挤成一串系统信息。 */
 .pd-note {
-  margin: 0.5rem auto 0;
+  margin: 2rem auto 0;
   max-width: 26em;
   text-align: center;
 }

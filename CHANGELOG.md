@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.4.0
+
+**The homepage is a quiet front page again: it opens safely, returns to reading mode, and
+adds four optional, deliberately low-key pieces of context.**
+
+The lock-up behind the 0.3.1 failure is now proven rather than guessed. The plugin passed
+the string `"preview"` to Obsidian's private `MarkdownView.setMode()` method, but that method
+expects an internal mode object. The call replaced `currentMode` with a string; Obsidian
+then failed on `show`, `onResize`, and `getEphemeralState`, leaving the homepage blank and
+making every other note appear unclickable. The fix uses the public leaf-state path:
+`getViewState()` → set `state.mode` → `setViewState()`.
+
+Returning to the homepage also had a separate timing edge. `file-open` can arrive several
+animation frames before the leaf's view has finished adopting the new file, so the homepage
+check now waits for the actual target view, with a short bounded retry instead of assuming
+one frame is enough. The protection remains arrival-only:
+switching the homepage to editing mode by hand is still allowed until the next visit.
+
+The homepage tab gets its own scoped marker so its title is centred independently of the
+close button. Nothing is hidden by that rule, and no other tab is changed.
+
+Four optional code blocks add only orientation and entry points — no cards, counters,
+statistics, or second decorative system:
+
+- `home-date`: a small date byline;
+- `home-resume`: one link to the most recent non-homepage note;
+- `home-actions`: three text actions for a new note, today's note, and the focus timer;
+- `home-pins`: a short, manually curated row of wiki links.
+
+The renderer suite now covers 49 cases, including the original private-mode corruption,
+multi-frame `file-open`, title scoping, all seven homepage processors, and the new restrained
+components. The auxiliary controls also share one paper-label treatment with deliberate
+spacing instead of inheriting Obsidian's cramped default buttons.
+
 ## 0.3.1
 
 **The homepage group is back on, and there is now a test that would catch the failure
