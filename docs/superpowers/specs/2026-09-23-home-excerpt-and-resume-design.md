@@ -1,31 +1,31 @@
-# Homepage excerpt and live resume — design
+# 首页摘录与动态「继续」——设计规格
 
-## Intent and boundaries
+## 目的与边界
 
-Make the existing sparse homepage useful without turning it into a dashboard. Both additions are opt-in, local, read-only components written as Markdown code blocks. They retain Paper Desk's quiet paper style, do not change Obsidian notes or other plugins, and do not require a network connection or model quota. Existing clock, homepage reading mode, title hiding, and file-tree behavior remain untouched.
+让目前留白较多的首页更有用，但不把它做成信息看板。两个新增能力都由 Markdown 代码块主动启用，只读取本地笔记。它们沿用 Paper Desk 安静的类纸风格，不修改笔记或其他插件，不依赖网络和模型额度。现有时钟、首页阅读模式、标题隐藏和文件树行为保持不变。
 
-## Chosen approach
+## 实现方式
 
-Use Obsidian's vault and metadata APIs from the existing Markdown code-block processors. This reuses the plugin's renderer lifecycle and the current recent-file algorithm. A second data store or generated homepage would duplicate vault state and make offline behavior less predictable; background rewriting of `homepage.md` is explicitly out of scope.
+沿用插件现有的 Markdown 代码块处理方式，通过 Obsidian 的文件库和笔记元数据接口读取内容。「继续」复用已有的最近打开笔记查找逻辑。另建数据库或后台生成首页会复制文件库里的状态，也会让离线行为更难预测；因此不采用。插件不会在后台重写 `homepage.md`。
 
-## `home-excerpt`
+## `home-excerpt`：指定笔记摘录
 
-The code block accepts exactly one non-comment line containing a wiki link with a heading, for example `[[YEAR3/CSI201/Lecture 03#Summary]]`. The link is resolved relative to the homepage through Obsidian's link resolver. The block reads the referenced Markdown note and renders the first non-empty prose paragraph under the first matching heading. A heading of the same or higher level ends the section. Code fences, lists, tables, and headings are not substituted for a prose paragraph. Inline Markdown in that paragraph is rendered by Obsidian. The component shows a restrained source label and a link back to the heading; it inherits existing theme colors and typography, with no hard-coded palette or new global style.
+代码块只接受一行非注释内容，格式为指向标题的双链，例如 `[[YEAR3/CSI201/Lecture 03#Summary]]`。插件按 Obsidian 的双链规则，从首页的位置解析目标笔记，读取匹配到的第一个标题下的第一段非空正文。遇到下一个同级或更高层级标题，就视为这一节结束。代码块、列表、表格和标题本身都不冒充正文段落。段落里的 Markdown 行内格式交给 Obsidian 渲染。组件显示克制的来源名称，以及能打开原文标题的链接；颜色和字体跟随现有主题，不加全局样式或写死的配色。
 
-If the source, heading, or paragraph is missing, the block renders nothing. It never changes the source note. A modification to that source refreshes the excerpt while the homepage is open. No polling or network request is used. Only one source is rendered per block, preventing an accidental feed.
+如果笔记、标题或正文段落不存在，这个区块不显示，也不留下空框。它绝不修改来源笔记。首页打开期间，来源笔记被修改后，摘录会刷新；不用轮询，也不请求网络。每个代码块只展示一个来源，避免变成信息流。
 
-## `home-brief` live resume
+## `home-brief`：动态「继续」
 
-Within an existing `home-brief` line, the exact token `{{resume}}` replaces the line's text with the display name of the most recently opened Markdown note that is not the configured homepage. For example `继续：{{resume}}` becomes a clickable continuation link. Resolution uses the same helper as the existing `home-resume` block so the two cannot disagree. If there is no eligible note, only the token line is omitted; other brief lines remain. A literal line without the token remains unchanged. The row refreshes on relevant workspace file/leaf changes, so returning to the homepage updates it even when the Markdown view is reused. The brief keeps its existing three-line limit and hand-drawn frame.
+在现有 `home-brief` 的某一行写入准确的 `{{resume}}`，插件就把这一行的文字替换为最近打开、且不是当前首页的 Markdown 笔记名称。例如 `继续：{{resume}}` 会变成可点击的继续入口。它与现有 `home-resume` 代码块共用同一个查找方法，避免两处给出不同结果。没有符合条件的笔记时，只略过含占位符的这一行，其他纸条文字照常显示；不含占位符的普通文字完全不变。切换文件或标签页后，这一行会更新；即使 Obsidian 复用已有的首页视图，回到首页时也能显示新结果。纸条仍最多显示三行，并保留现有手绘边框。
 
-## Isolation and lifecycle
+## 与其他插件的隔离
 
-All DOM and CSS changes stay inside Paper Desk's own code-block elements or its already-owned homepage tab marker. Subscriptions are registered through Markdown render children and removed with them. No file-tree event, drag/drop handler, body-wide selector, or other plugin data is altered. The previously identified sidebar-width alignment fix remains a separate, tested change: a ResizeObserver on the homepage view schedules one alignment calculation and is disconnected on unload.
+新增的页面元素和样式只作用于 Paper Desk 自己的代码块或已有的首页标签标记。事件监听随代码块一起注册和释放。不碰文件树事件、拖放处理、整个页面的通用选择器，也不改其他插件的数据。前面发现的「侧栏宽度变化后标签错位」是独立修复：只观察首页视图的尺寸，安排一次对齐计算，并在插件卸载时停止观察。
 
-## Verification
+## 验收方法
 
-Start with failing render/logic tests for excerpt parsing, link resolution, paragraph boundaries, missing targets, live resume substitution/refresh, and no cross-note effects. Then implement and run syntax check, logic, i18n, render, and strict-load tests. Add English and Chinese README usage instructions, including opt-in and failure behavior. After Obsidian is closed, sync the managed files with the existing script and check its byte-for-byte verification. Live validation must cover returning to homepage, both sidebars collapsed, excerpt click-through, updated resume after opening another note, and Flexplorer still functioning. Do not claim visual completion from unit tests alone.
+先补会失败的测试，覆盖摘录解析、双链定位、段落边界、目标缺失、「继续」替换与实时更新，以及不影响其他笔记。然后实现功能，依次检查语法，并跑逻辑、双语、渲染和严格加载测试。README 的中文和英文说明都要写清如何主动启用，以及目标缺失时会怎样。Obsidian 完全退出后，才用现有脚本同步插件文件，并核对源码与各副本逐字节一致。实机检查要覆盖：重新回到首页、收起两侧栏、点摘录跳回原文、打开另一篇笔记后「继续」更新，以及 Flexplorer 仍能正常工作。单靠自动测试不能宣称视觉效果已经确认。
 
-## Not included
+## 本次不做
 
-No automatic content generation, scheduled pushes, persistent sticky-note database, multi-excerpt feed, new settings switch, or changes to unrelated plugins. Publishing or pushing requires separate explicit approval.
+不做自动生成内容、定时推送、独立的便签数据库、多条摘录信息流或新的设置开关；不修改其他插件。发布和推送远端都需要你另行明确批准。
