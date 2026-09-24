@@ -21,7 +21,7 @@
 
 "use strict";
 
-const { Plugin, PluginSettingTab, Setting, ItemView, Notice, MarkdownRenderChild } = require("obsidian");
+const { Plugin, PluginSettingTab, Setting, ItemView, Notice, MarkdownRenderChild, MarkdownRenderer, Modal } = require("obsidian");
 
 
 /* ============================================================
@@ -90,7 +90,7 @@ const OWN = {
     "home.resume": "继续",
     "home.action.new": "新建笔记",
     "home.action.daily": "今日日记",
-    "home.action.focus": "开始专注",
+    "home.action.focus": "专注计时",
 
     /* 阶段名。这三个词会用手写字体渲染 —— 它们是全插件唯一用手写体的地方，
        刻意选短词：手写体在长句上可读性会塌。 */
@@ -123,31 +123,74 @@ const OWN = {
       "24 小时制读作 14:05，12 小时制读作 2:05 PM。只影响笔记里的那枚时钟 —— 计时器显示的始终是剩余时间，跟它无关。",
     "settings.hourFormat.24": "24 小时（14:05）",
     "settings.hourFormat.12": "12 小时（2:05 PM）",
+    "settings.clockSize.name": "时钟字号",
+    "settings.clockSize.desc": "默认 72 px；窄笔记栏会按实际栏宽自动收小。",
 
     "settings.home.heading": "首页",
     "settings.homePath.name": "首页笔记的路径",
     "settings.homePath.desc":
-      "从库根目录算起的完整路径，要带 .md。留空会彻底关掉「打开、藏标题、强制阅读」这一整组行为 —— 那时它就只是一枚时钟加一个计时器，不碰你的任何一篇笔记。",
+      "从库根目录算起的完整路径，要带 .md。留空会关掉首页的打开、藏标题与阅读模式；下方单独选择的默认阅读笔记不受影响。",
     "settings.openOnStartup.name": "启动时打开",
     "settings.openOnStartup.desc": "Obsidian 启动后自动打开上面那篇笔记。",
     "settings.openMode.name": "打开方式",
     "settings.openMode.desc":
-      "「替换当前标签」会把恢复出来的那篇笔记挤掉 —— 这通常正是首页想要的。",
+      "启动时打开首页，选择复用当前标签页或新建标签页。",
     "settings.openMode.replace": "替换当前标签",
     "settings.openMode.newTab": "在新标签页打开",
     "settings.forcePreview.name": "首页始终用阅读模式打开",
     "settings.forcePreview.desc":
-      "每次打开首页、或者从别的笔记切回来，都落在阅读模式。不这样做的话，光标会掉进 clock 这类代码块里，随手打一个字就把代码块改坏了。想改首页内容时自己切进编辑模式即可，插件不拦 —— 只是下次再打开时又回到阅读。只作用于首页，其他笔记不受影响。",
+      "每次打开首页、或者从别的笔记切回来，都落在阅读模式。不这样做的话，光标会掉进 clock 这类代码块里。想改首页时自己切进编辑模式即可，插件不拦。这一开关只控制首页；其他笔记由下方列表单独选择。",
+    "settings.previewPaths.name": "其他默认阅读的文件与文件夹",
+    "settings.previewPaths.desc": "仅在进入勾选的笔记时切到阅读模式；选文件夹会覆盖其下的 Markdown 笔记。手动切编辑不拦截，与首页开关独立。",
+    "settings.previewPaths.count": "已选 {n} 项。",
+    "settings.previewPaths.choose": "选择文件或文件夹",
+    "settings.previewPicker.title": "默认阅读范围",
+    "settings.previewPicker.hint": "勾选文件或文件夹。只保存路径，不移动文件，也不改变其他插件的文件树。",
+    "settings.previewPicker.search": "搜索路径…",
+    "settings.previewPicker.empty": "没有匹配的文件或文件夹",
+    "settings.previewPicker.clear": "清空选择",
+    "settings.previewPicker.cancel": "取消",
+    "settings.previewPicker.save": "保存选择",
     "settings.hideTitle.name": "藏起首页的笔记标题",
     "settings.hideTitle.desc":
-      "Obsidian 只给了一个「显示文件名标题」的全局开关，改了会影响库里每一篇笔记 —— 所以「只在这一篇上不显示」在原生设置里做不到。这个开关只作用于首页那篇。标签页上的标题会保留，藏掉的只是正文顶部那一行的文件名。",
+      "只隐藏首页正文顶部的文件名标题；标签页标题和其他笔记不受影响。",
+
+    "settings.homeTools.heading": "首页组件",
+    "settings.homeTools.desc":
+      "按需显示首页入口和区块。纸条文字保存在首页笔记中；最近线索只读取本地笔记。",
+    "settings.actionNew.name": "显示「新建笔记」",
+    "settings.actionNew.desc": "在首页动作区显示新建笔记按钮。",
+    "settings.actionDaily.name": "显示「今日日记」",
+    "settings.actionDaily.desc": "在首页动作区显示 Obsidian 今日日记按钮。",
+    "settings.actionFocus.name": "显示「专注计时」",
+    "settings.actionFocus.desc": "在首页显示专注计时器入口；点击只展开并选中右侧计时器，不会自动开始倒计时。",
+    "settings.actionFixed.name": "显示固定入口",
+    "settings.actionFixed.desc": "显示一个由你命名、打开指定笔记的按钮。",
+    "settings.fixedActionLabel.name": "固定入口文字",
+    "settings.fixedActionLabel.desc": "例如「收件箱」或「课程入口」。",
+    "settings.fixedActionPath.name": "固定入口路径",
+    "settings.fixedActionPath.desc": "从库根目录算起的笔记路径，例如 inbox.md。",
+    "settings.brief.name": "显示首页纸条",
+    "settings.brief.desc":
+      "显示 home-brief 代码块中的最多三行文字。只有 {{resume}} 会自动更新；其余文字需在笔记中编辑。",
+    "settings.briefOutline.name": "纸条的手绘边框",
+    "settings.briefOutline.desc": "用与时钟横线同样的笔触包住整张纸条；文字仍在首页笔记的 home-brief 代码块里改。",
+    "settings.actionsOutline.name": "入口按钮的手绘边框",
+    "settings.actionsOutline.desc": "每个入口按钮各有一圈轻淡的手绘边框；关闭后仍保留可点击的文字。",
+    "settings.threads.name": "显示最近线索",
+    "settings.threads.desc":
+      "从本地最近修改的笔记里，按顶层文件夹各取一条，避免同一项目占满首页。",
+    "settings.threadCount.name": "最近线索条数",
+    "settings.threadCount.desc": "显示 1–4 条，默认 3 条。",
+    "settings.threadExcludes.name": "最近线索排除路径",
+    "settings.threadExcludes.desc": "每行一个文件夹路径前缀；隐藏文件夹、首页和库根笔记会自动排除。",
 
     "settings.note.heading": "首页手写句",
     "settings.note.desc":
       "代码块里写什么就显示什么：只写一行就是固定那一句；写多行就会每天换一句。它不计数、不累积 —— 只是一句人话。",
     "settings.noteStyle.name": "样式",
     "settings.noteStyle.desc":
-      "「素句」只有字。另外两个各多一样装饰：手绘引号，或者整句轻微倾斜。时钟下面已经有一条手绘线了，所以这里不再给下划线 —— 同一种装饰出现两次，页面就从一枚印章变成一本贴纸册。",
+      "选择纯文字、手绘引号或轻微倾斜；不会额外添加下划线。",
     "settings.noteStyle.plain": "素句",
     "settings.noteStyle.quotes": "手绘引号",
     "settings.noteStyle.tilt": "轻微倾斜",
@@ -160,7 +203,7 @@ const OWN = {
       "下面这个代码块会按规则自动生成链接列表 —— 库里的笔记改了名、新增了，列表跟着变，不需要手工维护。",
     "settings.rules.name": "要收进来的文件名",
     "settings.rules.desc":
-      "每行一条关键词（不含 .md 后缀，不区分大小写）。用 * 作通配符：index 精确匹配；index* 以 index 开头；*index 以 index 结尾；*index* 含 index 即收录。注意一个反直觉的地方：github 是以 hub 结尾的，所以 *hub 和 *hub* 都会把 github 相关的笔记收进来；想避开就用 hub* 或精确写 hub。",
+      "每行一条规则，不含 .md，不区分大小写。index 精确匹配；index* 匹配前缀；*index 匹配后缀；*index* 匹配包含该词的文件名。",
     "settings.linksGap.name": "链接上方留多少空",
     "settings.linksGap.desc":
       "用视口高度的百分比表示（0–150）。默认 55，意思是「要往下滚才看得到」。调小它就往上浮。",
@@ -199,7 +242,7 @@ const OWN = {
     "settings.font.heading": "外观",
     "settings.font.name": "手写字体",
     "settings.font.desc":
-      "同一个手写体用在两处：计时器里的阶段名（专注 / 短休息 / 长休息），和首页手写句。填一个 CSS font-family，多个用逗号分隔、按顺序回落；留空表示跟随正文。时钟下方那条笔迹是画出来的线，不依赖字体。",
+      "同一个手写体用在计时器阶段名、首页手写句和案头纸条。填一个 CSS font-family，多个用逗号分隔、按顺序回落；留空表示跟随正文。手绘线与边框不依赖字体。",
     "settings.reset.name": "恢复默认设置",
     "settings.reset.desc":
       "把时长、手写字体与轮次显示都恢复初值（界面语言会保留 —— 那是设置页自身的属性，不属于插件配置）。",
@@ -221,7 +264,7 @@ const OWN = {
     "home.resume": "Continue",
     "home.action.new": "New note",
     "home.action.daily": "Today",
-    "home.action.focus": "Focus",
+    "home.action.focus": "Focus timer",
 
     "phase.work": "Focus",
     "phase.short": "Short break",
@@ -252,31 +295,74 @@ const OWN = {
       "24-hour reads 14:05; 12-hour reads 2:05 PM. This is only for the clock in your notes — the timer always counts down and is unaffected.",
     "settings.hourFormat.24": "24-hour (14:05)",
     "settings.hourFormat.12": "12-hour (2:05 PM)",
+    "settings.clockSize.name": "Clock size",
+    "settings.clockSize.desc": "72 px by default; scales down to the actual note-pane width when narrow.",
 
     "settings.home.heading": "Homepage",
     "settings.homePath.name": "Path of the homepage note",
     "settings.homePath.desc":
-      "Full path from the vault root, including .md. Leave it empty and the whole group below — opening it, hiding its title, forcing reading mode — switches off entirely, leaving a clock and a timer that touch no note of yours at all.",
+      "Full path from the vault root, including .md. Leave it empty to disable homepage opening, title hiding, and its reading-mode rule. Separately selected reading-mode notes are unaffected.",
     "settings.openOnStartup.name": "Open on startup",
     "settings.openOnStartup.desc": "Open that note once Obsidian has started.",
     "settings.openMode.name": "How to open it",
     "settings.openMode.desc":
-      '"Replace the current tab" pushes aside whatever the session restored — which is usually what a homepage is for.',
+      "When opening the homepage on startup, reuse the current tab or create a new one.",
     "settings.openMode.replace": "Replace the current tab",
     "settings.openMode.newTab": "Open in a new tab",
     "settings.forcePreview.name": "Always open the homepage in reading mode",
     "settings.forcePreview.desc":
-      "Land in reading mode every time the homepage opens, or every time you switch back to it from another note. Without this the caret lands inside a code block such as clock, and one stray keystroke breaks the block. Switch into editing yourself when you want to change something — the plugin does not fight you, it just returns to reading mode the next time you arrive. The homepage only; other notes are untouched.",
+      "Land in reading mode whenever you arrive at the homepage, avoiding an accidental edit inside a clock block. You can still switch to editing yourself. This switch controls the homepage only; other notes are selected separately below.",
+    "settings.previewPaths.name": "Other files and folders to open in reading mode",
+    "settings.previewPaths.desc": "Switch to reading mode only when entering selected notes. A selected folder covers its Markdown notes. Manual editing remains available; independent of the homepage switch.",
+    "settings.previewPaths.count": "{n} selected.",
+    "settings.previewPaths.choose": "Choose files or folders",
+    "settings.previewPicker.title": "Reading-mode selection",
+    "settings.previewPicker.hint": "Select files or folders. Only paths are saved; files and other plugins' file trees are untouched.",
+    "settings.previewPicker.search": "Search paths…",
+    "settings.previewPicker.empty": "No matching files or folders",
+    "settings.previewPicker.clear": "Clear selection",
+    "settings.previewPicker.cancel": "Cancel",
+    "settings.previewPicker.save": "Save selection",
     "settings.hideTitle.name": "Hide the note title on the homepage",
     "settings.hideTitle.desc":
-      "Obsidian only offers a global switch for the inline filename title, and changing it affects every note in the vault — so \"no title on this one note\" is not something the native settings can do. This applies to the homepage alone. The tab title stays; only the filename line at the top of the page is hidden.",
+      "Hide only the inline filename at the top of the homepage. The tab title and other notes are unaffected.",
+
+    "settings.homeTools.heading": "Homepage components",
+    "settings.homeTools.desc":
+      "Choose which entries and blocks appear. Desk-note text lives in the homepage note; recent threads read local notes only.",
+    "settings.actionNew.name": "Show New note",
+    "settings.actionNew.desc": "Show a new-note button in the homepage action row.",
+    "settings.actionDaily.name": "Show Today",
+    "settings.actionDaily.desc": "Show Obsidian's daily-note button in the homepage action row.",
+    "settings.actionFocus.name": "Show Focus timer",
+    "settings.actionFocus.desc": "Show the timer entry on the homepage; clicking reveals and selects the right-sidebar timer without starting it.",
+    "settings.actionFixed.name": "Show a fixed entry",
+    "settings.actionFixed.desc": "Show one custom-labelled button that opens a note you choose.",
+    "settings.fixedActionLabel.name": "Fixed-entry label",
+    "settings.fixedActionLabel.desc": "For example, Inbox or Course hub.",
+    "settings.fixedActionPath.name": "Fixed-entry path",
+    "settings.fixedActionPath.desc": "A note path from the vault root, such as inbox.md.",
+    "settings.brief.name": "Show desk note",
+    "settings.brief.desc":
+      "Show up to three lines from a home-brief block. Only {{resume}} updates automatically; edit other text in the note.",
+    "settings.briefOutline.name": "Hand-drawn note border",
+    "settings.briefOutline.desc": "Outline the whole desk note with the same pen character as the clock stroke. Edit its text in the homepage's home-brief block.",
+    "settings.actionsOutline.name": "Hand-drawn button borders",
+    "settings.actionsOutline.desc": "Give each action its own faint hand-drawn border. Turning this off keeps the text actions clickable.",
+    "settings.threads.name": "Show recent threads",
+    "settings.threads.desc":
+      "Pick one locally modified note from each top-level folder, so one project cannot fill the homepage.",
+    "settings.threadCount.name": "Number of recent threads",
+    "settings.threadCount.desc": "Show 1–4 threads; the default is 3.",
+    "settings.threadExcludes.name": "Paths excluded from recent threads",
+    "settings.threadExcludes.desc": "One folder-path prefix per line. Hidden folders, the homepage, and vault-root notes are excluded automatically.",
 
     "settings.note.heading": "Homepage line",
     "settings.note.desc":
       "The block shows exactly what you write in it: one line means a fixed line, several means it changes once a day. It counts nothing and accumulates nothing — it is just a sentence.",
     "settings.noteStyle.name": "Style",
     "settings.noteStyle.desc":
-      '"Plain" is the words alone. The other two each add one decoration: drawn quotation marks, or a slight tilt. The clock already has a drawn rule under it, so there is no underline here — let one decoration appear twice and the page stops being a seal and becomes a sticker album.',
+      "Choose plain text, drawn quotation marks, or a slight tilt. No extra underline is added.",
     "settings.noteStyle.plain": "Plain",
     "settings.noteStyle.quotes": "Drawn quotes",
     "settings.noteStyle.tilt": "Slight tilt",
@@ -289,7 +375,7 @@ const OWN = {
       "The block below builds its link list from rules, so renaming a note or adding a new one updates the list for you — nothing to maintain by hand.",
     "settings.rules.name": "File names to collect",
     "settings.rules.desc":
-      "One keyword per line (without the .md extension, case-insensitive). Use * as a wildcard: index matches exactly; index* starts with index; *index ends with index; *index* contains index. One counter-intuitive trap: github ends with hub, so both *hub and *hub* will pull in github-flavoured notes — use hub* or a bare hub to avoid that.",
+      "One case-insensitive rule per line, without .md. index matches exactly; index* matches a prefix; *index matches a suffix; *index* matches anywhere.",
     "settings.linksGap.name": "Blank space above the links",
     "settings.linksGap.desc":
       "As a percentage of the viewport height (0-150). The default, 55, means you have to scroll down to reach them. Lower it to bring them up.",
@@ -334,7 +420,7 @@ const OWN = {
     "settings.font.heading": "Appearance",
     "settings.font.name": "Handwriting font",
     "settings.font.desc":
-      'One handwriting font for two things: the phase name (Focus / Short break / Long break) and the homepage line. Give a CSS font-family; commas fall back in order. Empty follows your body font. The stroke under the clock is a drawn path, so it needs no font.',
+      'One handwriting font for the timer phase name, homepage line, and desk note. Give a CSS font-family; commas fall back in order. Empty follows your body font. Drawn strokes and borders need no font.',
     "settings.reset.name": "Restore defaults",
     "settings.reset.desc":
       "Reset the durations, the handwriting font and the round counter (the interface language is kept — it belongs to the settings page, not to the plugin).",
@@ -471,6 +557,9 @@ const DATE_LANG = "home-date";
 const RESUME_LANG = "home-resume";
 const ACTIONS_LANG = "home-actions";
 const PINS_LANG = "home-pins";
+const BRIEF_LANG = "home-brief";
+const EXCERPT_LANG = "home-excerpt";
+const THREADS_LANG = "home-threads";
 const VIEW_TYPE = "paper-desk-timer";
 const CSS_PREFIX = "pd-";
 
@@ -492,6 +581,7 @@ const DEFAULTS = {
      但它把一件看得见的事交给一个看不见的开关；等他来问「为什么变成 12 小时了」，
      我没有办法回答。默认值最要紧的一条性质就是可解释。 */
   hourFormat: "24",
+  clockSize: 72,
 
   /* ---- 首页 ----
 
@@ -511,6 +601,7 @@ const DEFAULTS = {
      标题 —— 原生只有全局开关，改了会影响库里每一篇笔记。
      模式 —— 落在编辑模式时光标会掉进 clock 这类代码块里，随手打一个字就把代码块改坏了。 */
   forcePreview: true,
+  previewPaths: [],
   hideTitle: true,
   noteStyle: "plain",
   /* 手写体比正文显小：同样的 px 值，楷体看上去比无衬线小一号。
@@ -524,6 +615,18 @@ const DEFAULTS = {
      做成设置项是因为它取决于屏幕高度与个人口味 —— 固定值在小屏上会刚好露出来，
      在大屏上又不够远。55 的意思是「要往下滚才看得到」。 */
   linksGap: 55,
+  showActionNew: false,
+  showActionDaily: false,
+  showActionFocus: true,
+  showActionFixed: false,
+  fixedActionLabel: "",
+  fixedActionPath: "",
+  showBrief: true,
+  briefOutline: true,
+  actionsOutline: true,
+  showThreads: true,
+  threadCount: 3,
+  threadExcludes: [],
 
   // ---- 计时器 ----
   workMinutes: 25,
@@ -769,9 +872,19 @@ function isHomePath(homePath, filePath) {
   return !!home && !!cur && cur === home;
 }
 
-/** 该不该把首页按回阅读模式。见 enforcePreview 里的说明。 */
-function shouldForcePreview(force, homePath, filePath) {
-  return !!force && isHomePath(homePath, filePath);
+/** 仅命中明确选择的文件或文件夹；前缀必须带 /，不能误命中同名兄弟目录。 */
+function matchesPreviewPath(paths, filePath) {
+  const path = String(filePath || "").trim();
+  if (!path || !Array.isArray(paths)) return false;
+  return paths.some((entry) => {
+    const selected = String(entry || "").trim().replace(/\/+$/, "");
+    return !!selected && (path === selected || path.startsWith(selected + "/"));
+  });
+}
+
+/** 首页开关与指定阅读列表彼此独立，默认列表为空不接管其他笔记。 */
+function shouldForcePreview(force, homePath, filePath, previewPaths) {
+  return (!!force && isHomePath(homePath, filePath)) || matchesPreviewPath(previewPaths, filePath);
 }
 
 function formatHomeDate(date, language) {
@@ -799,6 +912,123 @@ function parsePinnedLinks(source) {
   return out;
 }
 
+/** 案头投递只收三条短句。内容留在笔记里，所以自动化没跑、额度耗尽或完全离线时，
+    上一次投递仍然在，不会留下一个坏掉的空壳。 */
+function parseBriefLines(source, limit = 3) {
+  const out = [];
+  for (const raw of String(source == null ? "" : source).split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const splitAt = line.search(/[：:]/);
+    out.push(
+      splitAt < 0
+        ? { label: "", text: line }
+        : { label: line.slice(0, splitAt).trim(), text: line.slice(splitAt + 1).trim() }
+    );
+    if (out.length >= limit) break;
+  }
+  return out.filter((item) => item.text);
+}
+
+/** 一个代码块只指向一篇笔记的一个标题；其他内容一律不猜测。 */
+function parseExcerptSource(source) {
+  const lines = String(source == null ? "" : source).split(/\r?\n/)
+    .map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
+  if (lines.length !== 1) return null;
+  const match = lines[0].match(/^\[\[([^\]|#]+)#([^\]|#]+)\]\]$/);
+  if (!match) return null;
+  const linkpath = match[1].trim();
+  const heading = match[2].trim();
+  return linkpath && heading ? { linkpath, heading } : null;
+}
+
+/** 从新读取的正文确定章节边界，避免 vault.modify 先于标题缓存更新时越界摘录。 */
+function firstProseParagraph(markdown, headings, targetHeading) {
+  const lines = String(markdown == null ? "" : markdown).split(/\r?\n/);
+  const atxAt = (line) => String(line || "").match(/^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+  const setextAt = (line) => String(line || "").match(/^ {0,3}(=+|-{2,})\s*$/);
+  const fenceAt = (line) => String(line || "").match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+  const nextFence = (current, marker) => {
+    if (!marker) return current;
+    const delimiter = marker[1];
+    if (!current) return { char: delimiter[0], length: delimiter.length };
+    return delimiter[0] === current.char && delimiter.length >= current.length && !marker[2].trim()
+      ? null : current;
+  };
+  const entries = [];
+  let fence = null;
+  for (let i = 0; i < lines.length; i++) {
+    const marker = fenceAt(lines[i]);
+    if (marker) {
+      fence = nextFence(fence, marker);
+      continue;
+    }
+    if (fence || /^(?: {4}|\t)/.test(lines[i])) continue;
+    const atx = atxAt(lines[i]);
+    if (atx) {
+      entries.push({ heading: atx[2].trim(), level: atx[1].length, line: i, bodyStart: i + 1 });
+      continue;
+    }
+    const setext = lines[i].trim() && setextAt(lines[i + 1]);
+    if (setext && !/^(?:[-*+]\s|\d+[.)]\s|\|)/.test(lines[i].trim())) {
+      entries.push({ heading: lines[i].trim(), level: setext[1][0] === "=" ? 1 : 2,
+        line: i, bodyStart: i + 2 });
+      i++;
+    }
+  }
+  let target = entries.find((entry) => entry.heading === targetHeading);
+  if (!target) {
+    // 带行内格式的标题可由 Obsidian 缓存识别；仍须用新正文核对行号与标题身份。
+    const cached = (Array.isArray(headings) ? headings : []).find((entry) =>
+      entry.heading === targetHeading && Number.isInteger(entry.position?.start?.line));
+    const line = cached?.position.start.line;
+    const current = entries.find((entry) => entry.line === line);
+    const normalized = current?.heading.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/[*_~`]/g, "").trim();
+    if (cached && current && current.level === cached.level && normalized === targetHeading) {
+      target = { ...current, heading: targetHeading };
+    }
+  }
+  if (!target) return "";
+  const nextHeading = entries.find((entry) => entry.line > target.line && entry.level <= target.level);
+  const end = nextHeading ? nextHeading.line : lines.length;
+  const headingLines = new Set(entries.flatMap((entry) =>
+    entry.bodyStart === entry.line + 2 ? [entry.line, entry.line + 1] : [entry.line]));
+  let inFence = null;
+  let skipBlock = false;
+  const blockStart = (line) => /^(?:[-*+]\s|\d+[.)]\s|\||>|:::\s?)/.test(line);
+  const tableDivider = (line) => /^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$/.test(line);
+  for (let i = target.bodyStart; i < end; i++) {
+    const raw = lines[i];
+    const line = raw.trim();
+    const marker = fenceAt(raw);
+    if (marker) {
+      inFence = nextFence(inFence, marker);
+      if (!inFence) skipBlock = false;
+      continue;
+    }
+    if (inFence) continue;
+    if (!line) { skipBlock = false; continue; }
+    if (headingLines.has(i)) { skipBlock = false; continue; }
+    if (/^(?: {4}|\t)/.test(raw) || blockStart(line) ||
+        (line.includes("|") && tableDivider((lines[i + 1] || "").trim()))) {
+      skipBlock = true;
+      continue;
+    }
+    if (skipBlock) continue;
+    const paragraph = [line];
+    while (i + 1 < end) {
+      const nextRaw = lines[i + 1];
+      const next = nextRaw.trim();
+      if (!next || headingLines.has(i + 1) || /^(?: {4}|\t)/.test(nextRaw) ||
+          blockStart(next) || fenceAt(nextRaw)) break;
+      paragraph.push(next);
+      i++;
+    }
+    return paragraph.join("\n");
+  }
+  return "";
+}
+
 /* ============================ 时钟 ============================ */
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -807,14 +1037,27 @@ const SVG_NS = "http://www.w3.org/2000/svg";
    用 SVG path 而不是 border-bottom：笔迹要有轻微的起伏和不齐，
    一条 1px 直线会立刻变成「分隔线」，那就成了另一种东西。
    刻意不承载任何信息，所以它不会变成噪音。 */
-function buildStroke() {
+function buildStroke(name = "clock-stroke") {
   const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("class", CSS_PREFIX + "clock-stroke");
+  svg.setAttribute("class", CSS_PREFIX + name);
   svg.setAttribute("viewBox", "0 0 140 6");
   svg.setAttribute("preserveAspectRatio", "none");
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS(SVG_NS, "path");
   path.setAttribute("d", "M2 3.2C22 1.4 46 4.6 70 2.8S112 4.2 138 2.6");
+  svg.appendChild(path);
+  return svg;
+}
+
+/** 与时钟横线共用笔触质感的闭合轮廓；只装饰本插件自己的组件。 */
+function buildDrawnFrame(name, viewBox, outline) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", CSS_PREFIX + name);
+  svg.setAttribute("viewBox", viewBox);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", outline);
   svg.appendChild(path);
   return svg;
 }
@@ -826,8 +1069,12 @@ function buildStroke() {
  * 两个方块绝对定位盖在它上面。这样不管用户把等宽字体换成什么、
  * 字宽比例是多少，数字都不会因为冒号而位移。
  */
-function renderClock(el) {
+function renderClock(el, size) {
+  /* 只给自己的代码块建立容器查询上下文；不用窗口宽度推测笔记栏宽度。 */
+  el.addClass(CSS_PREFIX + "clock-host");
   const root = el.createDiv({ cls: CSS_PREFIX + "clock" });
+  const number = Number(size);
+  root.style.setProperty("--pd-clock-config-size", (Number.isFinite(number) && number > 0 ? Math.min(112, Math.max(40, number)) : 72) + "px");
   const line = root.createDiv({ cls: CSS_PREFIX + "clock-time" });
 
   const hh = line.createSpan({ cls: CSS_PREFIX + "clock-part", text: "--" });
@@ -835,8 +1082,9 @@ function renderClock(el) {
   const colon = line.createSpan({ cls: CSS_PREFIX + "clock-colon" });
   colon.createSpan({ cls: CSS_PREFIX + "clock-colon-ghost", text: ":" });
   const dots = colon.createSpan({ cls: CSS_PREFIX + "clock-colon-dots" });
-  dots.createSpan({ cls: CSS_PREFIX + "colon-dot" });
-  dots.createSpan({ cls: CSS_PREFIX + "colon-dot" });
+  for (let i = 0; i < 2; i++) {
+    dots.createSpan({ cls: CSS_PREFIX + "colon-dot" });
+  }
 
   const mm = line.createSpan({ cls: CSS_PREFIX + "clock-part", text: "--" });
 
@@ -846,11 +1094,6 @@ function renderClock(el) {
   const meridiem = line.createSpan({ cls: CSS_PREFIX + "clock-meridiem" });
 
   root.appendChild(buildStroke());
-
-  /* 把闪烁对齐到真实秒：CSS 动画默认从元素挂载那一刻起算，
-     那样它会和墙上时钟的秒错开，看着像「随机的呼吸」。
-     用负的 animation-delay 把动画相位推到当前秒上。 */
-  dots.style.animationDelay = "-" + ((Date.now() / 1000) % 2).toFixed(3) + "s";
 
   return { hh, mm, meridiem };
 }
@@ -866,7 +1109,7 @@ class ClockBlock extends MarkdownRenderChild {
   }
 
   onload() {
-    const parts = renderClock(this.containerEl);
+    const parts = renderClock(this.containerEl, this.plugin.settings.clockSize);
 
     const paint = () => {
       const settings = this.plugin && this.plugin.settings;
@@ -999,6 +1242,25 @@ class DateBlock extends MarkdownRenderChild {
   }
 }
 
+function findRecentNonHomeFile(app, homePath) {
+  const workspace = app.workspace;
+  if (!workspace || typeof workspace.getLastOpenFiles !== "function") return null;
+  for (const path of workspace.getLastOpenFiles() || []) {
+    if (!path || isHomePath(homePath, path)) continue;
+    const file = app.vault.getAbstractFileByPath(path);
+    if (file && file.extension === "md") return file;
+  }
+  return null;
+}
+
+function displayRecentFile(plugin, file) {
+  const cache = plugin.app.metadataCache.getFileCache(file);
+  return {
+    title: displayNameFor(file.basename, cache && cache.frontmatter),
+    path: file.path,
+  };
+}
+
 class ResumeBlock extends MarkdownRenderChild {
   constructor(containerEl, plugin) {
     super(containerEl);
@@ -1007,31 +1269,29 @@ class ResumeBlock extends MarkdownRenderChild {
 
   onload() {
     const workspace = this.plugin.app.workspace;
-    if (!workspace || typeof workspace.getLastOpenFiles !== "function") return;
-    const home = String(this.plugin.settings.homePath || "").trim();
-    let file = null;
-    for (const path of workspace.getLastOpenFiles() || []) {
-      if (!path || path === home) continue;
-      const candidate = this.plugin.app.vault.getAbstractFileByPath(path);
-      if (candidate && candidate.extension === "md") {
-        file = candidate;
-        break;
-      }
-    }
+    if (!workspace) return;
+    this.registerEvent(workspace.on("file-open", () => this.render()));
+    this.registerEvent(workspace.on("active-leaf-change", () => this.render()));
+    this.render();
+  }
+
+  render() {
+    this.containerEl.empty();
+    const workspace = this.plugin.app.workspace;
+    const file = findRecentNonHomeFile(this.plugin.app, this.plugin.settings.homePath);
     if (!file) return;
 
-    const cache = this.plugin.app.metadataCache.getFileCache(file);
-    const title = displayNameFor(file.basename, cache && cache.frontmatter);
+    const { title, path } = displayRecentFile(this.plugin, file);
     const root = this.containerEl.createDiv({ cls: CSS_PREFIX + "resume" });
     root.createSpan({ cls: CSS_PREFIX + "resume-label", text: this.plugin.i18n.t("home.resume") });
     const link = root.createEl("a", {
       cls: CSS_PREFIX + "resume-link",
       text: title,
-      href: file.path,
+      href: path,
     });
     link.onclick = (event) => {
       event.preventDefault();
-      workspace.openLinkText(file.path, "", false);
+      workspace.openLinkText(path, "", false);
     };
   }
 }
@@ -1043,20 +1303,178 @@ class ActionsBlock extends MarkdownRenderChild {
   }
 
   onload() {
-    const root = this.containerEl.createDiv({ cls: CSS_PREFIX + "actions" });
-    const actions = [
-      ["home.action.new", "file-explorer:new-file"],
-      ["home.action.daily", "daily-notes"],
-      ["home.action.focus", "paper-desk:open-timer"],
-    ];
-    for (const [labelKey, commandId] of actions) {
+    const s = this.plugin.settings;
+    const actions = [];
+    if (s.showActionNew) actions.push({ labelKey: "home.action.new", commandId: "file-explorer:new-file" });
+    if (s.showActionDaily) actions.push({ labelKey: "home.action.daily", commandId: "daily-notes" });
+    if (s.showActionFocus) actions.push({ labelKey: "home.action.focus", commandId: "paper-desk:open-timer" });
+    const fixedLabel = String(s.fixedActionLabel || "").trim();
+    const fixedPath = String(s.fixedActionPath || "").trim();
+    if (s.showActionFixed && fixedLabel && fixedPath) actions.push({ label: fixedLabel, path: fixedPath });
+    if (!actions.length) return;
+
+    this.containerEl.addClass(CSS_PREFIX + "actions-host");
+    const root = this.containerEl.createDiv({
+      cls: CSS_PREFIX + "actions" + (s.actionsOutline ? " " + CSS_PREFIX + "actions-outlined" : ""),
+    });
+    for (const action of actions) {
       const button = root.createEl("button", {
         cls: CSS_PREFIX + "action",
-        text: this.plugin.i18n.t(labelKey),
+        text: action.label || this.plugin.i18n.t(action.labelKey),
       });
       button.onclick = (event) => {
         event.preventDefault();
-        this.plugin.app.commands.executeCommandById(commandId);
+        if (action.path) this.plugin.app.workspace.openLinkText(action.path, "", false);
+        else this.plugin.app.commands.executeCommandById(action.commandId);
+      };
+      if (s.actionsOutline) button.appendChild(buildDrawnFrame(
+        "action-frame", "0 0 120 42",
+        "M10 4C29 1.8 81 5.4 109 3.1C115 2.9 117 7.2 117 11.5C118.1 18 115.9 29 116.6 34.4C116.2 39.5 111.9 39.6 107 39.1C84 41 32 37.8 11 39C5.9 39.2 3.1 36.7 3.4 32C2 24.1 4.3 13.6 3.7 10.8C3.8 6.4 5.8 4.2 10 4Z"
+      ));
+    }
+  }
+}
+
+class BriefBlock extends MarkdownRenderChild {
+  constructor(containerEl, plugin, source) {
+    super(containerEl);
+    this.plugin = plugin;
+    this.source = source;
+  }
+
+  onload() {
+    if (!this.plugin.settings.showBrief) return;
+    if (this.source.includes("{{resume}}")) {
+      const workspace = this.plugin.app.workspace;
+      this.registerEvent(workspace.on("file-open", () => this.render()));
+      this.registerEvent(workspace.on("active-leaf-change", () => this.render()));
+    }
+    this.render();
+  }
+
+  render() {
+    this.containerEl.empty();
+    const items = parseBriefLines(this.source).map((item) => {
+      if (item.text !== "{{resume}}") return item;
+      const file = findRecentNonHomeFile(this.plugin.app, this.plugin.settings.homePath);
+      return file ? { ...item, resume: displayRecentFile(this.plugin, file) } : null;
+    }).filter(Boolean);
+    if (!items.length) return;
+    this.containerEl.addClass(CSS_PREFIX + "brief-host");
+    const root = this.containerEl.createDiv({
+      cls: CSS_PREFIX + "brief" + (this.plugin.settings.briefOutline ? " " + CSS_PREFIX + "brief-outlined" : ""),
+    });
+    for (const item of items) {
+      const row = root.createDiv({ cls: CSS_PREFIX + "brief-line" });
+      if (item.label) row.createSpan({ cls: CSS_PREFIX + "brief-label", text: item.label });
+      if (item.resume) {
+        const link = row.createEl("a", {
+          cls: CSS_PREFIX + "brief-text " + CSS_PREFIX + "brief-resume-link",
+          text: item.resume.title,
+          href: item.resume.path,
+        });
+        link.setAttribute("title", item.resume.title);
+        link.onclick = (event) => {
+          event.preventDefault();
+          this.plugin.app.workspace.openLinkText(item.resume.path, "", false);
+        };
+      } else {
+        row.createSpan({ cls: CSS_PREFIX + "brief-text", text: item.text });
+      }
+    }
+    if (this.plugin.settings.briefOutline) root.appendChild(buildDrawnFrame(
+      "brief-frame", "0 0 540 180",
+      "M18 5.5C117 2.4 214 8.2 319 4.8C409 3.5 488 7.9 521 5.7C530 5.5 535 10.8 534.6 18.9C537 64 532.6 122 534.8 160.8C535 170.5 530 175.5 520.4 175.1C404 178.5 307 172.7 208 176.2C116 177.4 52 173.1 19 175C8.8 175.4 5.2 170.8 5.6 161.5C3.4 118 7.8 66 5.4 19C5.2 9.7 8.9 5.5 18 5.5Z"
+    ));
+  }
+}
+
+class ExcerptBlock extends MarkdownRenderChild {
+  constructor(containerEl, plugin, source, sourcePath) {
+    super(containerEl);
+    this.plugin = plugin;
+    this.source = source;
+    this.sourcePath = sourcePath;
+    this._requestId = 0;
+  }
+
+  onload() {
+    const parsed = parseExcerptSource(this.source);
+    if (!parsed) return;
+    const app = this.plugin.app;
+    const file = app.metadataCache.getFirstLinkpathDest(parsed.linkpath, this.sourcePath);
+    if (!file || file.extension !== "md") return;
+    this.file = file;
+    this.heading = parsed.heading;
+    this.registerEvent(app.vault.on("modify", (changed) => {
+      if (changed?.path === file.path) void this.render();
+    }));
+    void this.render();
+  }
+
+  onunload() {
+    this._requestId++;
+  }
+
+  async render() {
+    const requestId = ++this._requestId;
+    this.containerEl.empty();
+    const app = this.plugin.app;
+    const cache = app.metadataCache.getFileCache(this.file);
+    let markdown;
+    try {
+      markdown = await app.vault.cachedRead(this.file);
+    } catch (_) {
+      return;
+    }
+    if (requestId !== this._requestId) return;
+    const paragraph = firstProseParagraph(markdown, cache?.headings || [], this.heading);
+    if (!paragraph) return;
+    const root = document.createElement("div");
+    root.addClass(CSS_PREFIX + "excerpt");
+    const body = root.createDiv({ cls: CSS_PREFIX + "excerpt-body" });
+    try {
+      await MarkdownRenderer.render(app, paragraph, body, this.file.path, this);
+    } catch (_) {
+      return;
+    }
+    if (requestId !== this._requestId) return;
+    const target = this.file.path + "#" + this.heading;
+    const source = root.createEl("a", {
+      cls: CSS_PREFIX + "excerpt-source",
+      text: this.file.basename + " / " + this.heading,
+      href: target,
+    });
+    source.onclick = (event) => {
+      event.preventDefault();
+      app.workspace.openLinkText(target, this.sourcePath, false);
+    };
+    this.containerEl.appendChild(root);
+  }
+}
+
+class ThreadsBlock extends MarkdownRenderChild {
+  constructor(containerEl, plugin) {
+    super(containerEl);
+    this.plugin = plugin;
+  }
+
+  onload() {
+    if (!this.plugin.settings.showThreads) return;
+    const items = this.plugin.collectRecentThreads();
+    if (!items.length) return;
+    const root = this.containerEl.createDiv({ cls: CSS_PREFIX + "threads" });
+    for (const item of items) {
+      const row = root.createDiv({ cls: CSS_PREFIX + "thread" });
+      row.createSpan({ cls: CSS_PREFIX + "thread-area", text: item.area });
+      const link = row.createEl("a", {
+        cls: CSS_PREFIX + "thread-link",
+        text: item.title,
+        href: item.file.path,
+      });
+      link.onclick = (event) => {
+        event.preventDefault();
+        this.plugin.app.workspace.openLinkText(item.file.path, "", false);
       };
     }
   }
@@ -1200,6 +1618,110 @@ class PomodoroView extends ItemView {
 
 /* ============================ 设置页 ============================ */
 
+/** 只读 vault 文件树并保存本插件的路径列表，不调用文件树插件的任何 API。 */
+class PreviewPathsModal extends Modal {
+  constructor(app, plugin, onSaved) {
+    super(app);
+    this.plugin = plugin;
+    this.onSaved = onSaved;
+    this.selected = new Set(Array.isArray(plugin.settings.previewPaths) ? plugin.settings.previewPaths : []);
+    this.expanded = new Set();
+    this.query = "";
+  }
+
+  loadedFiles() {
+    return this.app.vault.getAllLoadedFiles().filter((file) =>
+      file && file.path && file.path !== "/" &&
+      (Array.isArray(file.children) || file.extension === "md")
+    );
+  }
+
+  onOpen() {
+    this.contentEl.addClass(CSS_PREFIX + "preview-picker");
+    const t = (key, vars) => this.plugin.i18n.t(key, vars);
+    this.contentEl.createEl("h3", { text: t("settings.previewPicker.title") });
+    this.contentEl.createDiv({ cls: CSS_PREFIX + "preview-picker-hint", text: t("settings.previewPicker.hint") });
+    const search = this.contentEl.createEl("input", { type: "search" });
+    search.placeholder = t("settings.previewPicker.search");
+    search.addEventListener("input", () => {
+      this.query = search.value.trim().toLocaleLowerCase();
+      this.renderTree();
+    });
+    this.treeEl = this.contentEl.createDiv({ cls: CSS_PREFIX + "preview-tree" });
+    this.renderTree();
+    const footer = this.contentEl.createDiv({ cls: CSS_PREFIX + "preview-picker-footer" });
+    footer.createEl("button", { text: t("settings.previewPicker.clear") }).addEventListener("click", () => {
+      this.selected.clear();
+      this.renderTree();
+    });
+    footer.createEl("button", { text: t("settings.previewPicker.cancel") }).addEventListener("click", () => this.close());
+    footer.createEl("button", { cls: "mod-cta", text: t("settings.previewPicker.save") }).addEventListener("click", async () => {
+      this.plugin.settings.previewPaths = Array.from(this.selected).sort((a, b) => a.localeCompare(b));
+      await this.plugin.save();
+      if (this.onSaved) this.onSaved();
+      this.close();
+    });
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+
+  renderTree() {
+    this.treeEl.empty();
+    const files = this.loadedFiles();
+    if (this.query) {
+      const hits = files.filter((file) => file.path.toLocaleLowerCase().includes(this.query));
+      for (const file of hits) this.renderRow(this.treeEl, file, file.path, 0, false);
+      if (!hits.length) this.treeEl.createDiv({ text: this.plugin.i18n.t("settings.previewPicker.empty") });
+      return;
+    }
+
+    const root = { path: "", children: [] };
+    const nodes = new Map([["", root]]);
+    for (const file of files) nodes.set(file.path, { file, path: file.path, children: [] });
+    for (const node of nodes.values()) {
+      if (!node.path) continue;
+      const parentPath = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
+      (nodes.get(parentPath) || root).children.push(node);
+    }
+    const draw = (node, depth) => {
+      const folder = Array.isArray(node.file.children);
+      this.renderRow(this.treeEl, node.file, node.file.name, depth, folder && node.children.length > 0);
+      if (folder && this.expanded.has(node.path)) {
+        for (const child of node.children.sort((a, b) =>
+          Number(Array.isArray(b.file.children)) - Number(Array.isArray(a.file.children)) ||
+          a.file.name.localeCompare(b.file.name))) draw(child, depth + 1);
+      }
+    };
+    for (const child of root.children.sort((a, b) =>
+      Number(Array.isArray(b.file.children)) - Number(Array.isArray(a.file.children)) ||
+      a.file.name.localeCompare(b.file.name))) draw(child, 0);
+  }
+
+  renderRow(parent, file, name, depth, canExpand) {
+    const row = parent.createDiv({ cls: CSS_PREFIX + "preview-row" });
+    row.style.paddingInlineStart = (depth * 18 + 6) + "px";
+    const toggle = row.createEl("button", {
+      cls: CSS_PREFIX + "preview-expand",
+      text: canExpand ? (this.expanded.has(file.path) ? "−" : "+") : "",
+    });
+    toggle.disabled = !canExpand;
+    toggle.addEventListener("click", () => {
+      if (this.expanded.has(file.path)) this.expanded.delete(file.path);
+      else this.expanded.add(file.path);
+      this.renderTree();
+    });
+    const check = row.createEl("input", { type: "checkbox" });
+    check.checked = this.selected.has(file.path);
+    check.addEventListener("change", () => {
+      if (check.checked) this.selected.add(file.path);
+      else this.selected.delete(file.path);
+    });
+    row.createSpan({ text: name });
+  }
+}
+
 class PaperDeskSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -1244,6 +1766,20 @@ class PaperDeskSettingTab extends PluginSettingTab {
           this.plugin.refreshBlocks();
         });
       });
+
+    new Setting(containerEl)
+      .setName(t("settings.clockSize.name"))
+      .setDesc(t("settings.clockSize.desc"))
+      .addSlider((slider) =>
+        slider.setLimits(40, 112, 4)
+          .setValue(Math.min(112, Math.max(40, Number(s.clockSize) || 72)))
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            s.clockSize = value;
+            await this.plugin.save();
+            this.plugin.refreshBlocks();
+          })
+      );
 
     /* ---- 首页 ----
        这一组放在计时器前面：它们决定的是「你打开 Obsidian 时看到什么」，
@@ -1300,6 +1836,16 @@ class PaperDeskSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(t("settings.previewPaths.name"))
+      .setDesc(t("settings.previewPaths.desc") + " " + t("settings.previewPaths.count", {
+        n: Array.isArray(s.previewPaths) ? s.previewPaths.length : 0,
+      }))
+      .addButton((button) => button
+        .setButtonText(t("settings.previewPaths.choose"))
+        .onClick(() => new PreviewPathsModal(this.app, this.plugin, () => this.display()).open())
+      );
+
+    new Setting(containerEl)
       .setName(t("settings.hideTitle.name"))
       .setDesc(t("settings.hideTitle.desc"))
       .addToggle((tg) =>
@@ -1309,6 +1855,82 @@ class PaperDeskSettingTab extends PluginSettingTab {
           this.plugin.markHomeViews();
         })
       );
+
+    /* ---- 首页组件 ----
+       都是独立开关：默认只留真正会用的「开始专注」，别把首页变成按钮面板。 */
+    containerEl.createEl("h3", { text: t("settings.homeTools.heading") });
+    containerEl.createDiv({ cls: CSS_PREFIX + "setting-note", text: t("settings.homeTools.desc") });
+
+    const homeToggle = (key, nameKey, descKey) =>
+      new Setting(containerEl)
+        .setName(t(nameKey))
+        .setDesc(t(descKey))
+        .addToggle((tg) =>
+          tg.setValue(!!s[key]).onChange(async (v) => {
+            s[key] = v;
+            await this.plugin.save();
+            this.plugin.refreshBlocks();
+          })
+        );
+
+    homeToggle("showActionNew", "settings.actionNew.name", "settings.actionNew.desc");
+    homeToggle("showActionDaily", "settings.actionDaily.name", "settings.actionDaily.desc");
+    homeToggle("showActionFocus", "settings.actionFocus.name", "settings.actionFocus.desc");
+    homeToggle("showActionFixed", "settings.actionFixed.name", "settings.actionFixed.desc");
+
+    new Setting(containerEl)
+      .setName(t("settings.fixedActionLabel.name"))
+      .setDesc(t("settings.fixedActionLabel.desc"))
+      .addText((txt) =>
+        txt.setValue(s.fixedActionLabel || "").onChange(async (v) => {
+          s.fixedActionLabel = v.trim();
+          await this.plugin.save();
+          this.plugin.refreshBlocks();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(t("settings.fixedActionPath.name"))
+      .setDesc(t("settings.fixedActionPath.desc"))
+      .addText((txt) =>
+        txt.setValue(s.fixedActionPath || "").onChange(async (v) => {
+          s.fixedActionPath = v.trim();
+          await this.plugin.save();
+          this.plugin.refreshBlocks();
+        })
+      );
+
+    homeToggle("showBrief", "settings.brief.name", "settings.brief.desc");
+    homeToggle("briefOutline", "settings.briefOutline.name", "settings.briefOutline.desc");
+    homeToggle("actionsOutline", "settings.actionsOutline.name", "settings.actionsOutline.desc");
+    homeToggle("showThreads", "settings.threads.name", "settings.threads.desc");
+
+    new Setting(containerEl)
+      .setName(t("settings.threadCount.name"))
+      .setDesc(t("settings.threadCount.desc"))
+      .addSlider((sl) =>
+        sl
+          .setLimits(1, 4, 1)
+          .setValue(Math.min(4, Math.max(1, Number(s.threadCount) || 3)))
+          .setDynamicTooltip()
+          .onChange(async (v) => {
+            s.threadCount = v;
+            await this.plugin.save();
+            this.plugin.refreshBlocks();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t("settings.threadExcludes.name"))
+      .setDesc(t("settings.threadExcludes.desc"))
+      .addTextArea((txt) => {
+        txt.setValue((s.threadExcludes || []).join("\n")).onChange(async (v) => {
+          s.threadExcludes = v.split("\n").map((x) => x.trim()).filter(Boolean);
+          await this.plugin.save();
+          this.plugin.refreshBlocks();
+        });
+        txt.inputEl.rows = 3;
+      });
 
     /* ---- 首页手写句 ---- */
     containerEl.createEl("h3", { text: t("settings.note.heading") });
@@ -1572,6 +2194,18 @@ class PaperDeskPlugin extends Plugin {
       ctx.addChild(new PinsBlock(el, this, source));
     });
 
+    this.registerMarkdownCodeBlockProcessor(BRIEF_LANG, (source, el, ctx) => {
+      ctx.addChild(new BriefBlock(el, this, source));
+    });
+
+    this.registerMarkdownCodeBlockProcessor(EXCERPT_LANG, (source, el, ctx) => {
+      ctx.addChild(new ExcerptBlock(el, this, source, ctx.sourcePath || ""));
+    });
+
+    this.registerMarkdownCodeBlockProcessor(THREADS_LANG, (source, el, ctx) => {
+      ctx.addChild(new ThreadsBlock(el, this));
+    });
+
     const data = (await this.loadData()) || {};
     this.settings = Object.assign({}, DEFAULTS, data);
     delete this.settings.timer;
@@ -1588,7 +2222,7 @@ class PaperDeskPlugin extends Plugin {
 
     /* 跨天清零放在最前面，早于下面那段「离线走完」的修正 ——
        顺序反了会变成「先补推进一段、再清零」，刚补的那轮就被吃掉了。 */
-    if (needsDailyReset(this.timer, this.settings, Date.now())) {
+    if (needsDailyReset(this.timer, this.settings, new Date())) {
       this.timer.completed = 0;
     }
     this.timer.day = dayKey(new Date());
@@ -1631,8 +2265,12 @@ class PaperDeskPlugin extends Plugin {
       })
     );
     this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => this.finishHomeArrival(leaf))
+    );
+    this.registerEvent(
       this.app.workspace.on("layout-change", () => this.markHomeViews())
     );
+    this.registerDomEvent(window, "resize", () => this.markHomeViews());
 
     this.addCommand({
       id: "open-timer",
@@ -1698,6 +2336,11 @@ class PaperDeskPlugin extends Plugin {
   onunload() {
     if (this._homeArrivalFrame) window.cancelAnimationFrame(this._homeArrivalFrame);
     this._homeArrivalFrame = 0;
+    if (this._homeTabAlignFrame) window.cancelAnimationFrame(this._homeTabAlignFrame);
+    this._homeTabAlignFrame = 0;
+    if (this._homeTabResizeObserver) this._homeTabResizeObserver.disconnect();
+    this._homeTabResizeObserver = null;
+    this.clearHomeArrivalRetry();
     // 视图由 Obsidian 按 registerView 回收；这里只需把样式变量撤掉，保证禁用后界面复原。
     document.body.style.removeProperty("--pd-handwriting");
     document.body.style.removeProperty("--pd-note-size");
@@ -1707,7 +2350,10 @@ class PaperDeskPlugin extends Plugin {
       if (leaf.view && leaf.view.containerEl) {
         leaf.view.containerEl.classList.remove(CSS_PREFIX + "is-home");
       }
-      if (leaf.tabHeaderEl) leaf.tabHeaderEl.classList.remove(CSS_PREFIX + "is-home-tab");
+      if (leaf.tabHeaderEl) {
+        leaf.tabHeaderEl.classList.remove(CSS_PREFIX + "is-home-tab");
+        leaf.tabHeaderEl.style.removeProperty("--pd-home-tab-offset");
+      }
     }
   }
 
@@ -1823,6 +2469,11 @@ class PaperDeskPlugin extends Plugin {
   markHomeViews() {
     const home = String(this.settings.homePath || "").trim();
 
+    if (!this._homeTabResizeObserver && typeof ResizeObserver !== "undefined") {
+      this._homeTabResizeObserver = new ResizeObserver(() => this.scheduleHomeTabAlignment());
+    }
+    if (this._homeTabResizeObserver) this._homeTabResizeObserver.disconnect();
+
     for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
       const view = leaf.view;
       if (!view || !view.containerEl) continue;
@@ -1833,14 +2484,69 @@ class PaperDeskPlugin extends Plugin {
       );
       if (leaf.tabHeaderEl) {
         leaf.tabHeaderEl.classList.toggle(CSS_PREFIX + "is-home-tab", isHome);
+        if (!isHome) leaf.tabHeaderEl.style.removeProperty("--pd-home-tab-offset");
       }
+      if (isHome && this._homeTabResizeObserver) {
+        this._homeTabResizeObserver.observe(view.containerEl);
+      }
+    }
+
+    this.scheduleHomeTabAlignment();
+  }
+
+  scheduleHomeTabAlignment() {
+    if (this._homeTabAlignFrame) window.cancelAnimationFrame(this._homeTabAlignFrame);
+    this._homeTabAlignFrame = window.requestAnimationFrame(() => {
+      this._homeTabAlignFrame = 0;
+      this.alignHomeTabTitle();
+    });
+  }
+
+  /** Obsidian 的标签条和视图标题各自居中；主题可能让两者的可用宽度不同。
+      只在首页独占一个标签组时移动这一枚标签，不碰兄弟标签的布局。 */
+  alignHomeTabTitle() {
+    const home = String(this.settings.homePath || "").trim();
+    if (!home) return;
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      const tab = leaf.tabHeaderEl;
+      if (!tab || !view || !view.file || !isHomePath(home, view.file.path)) continue;
+      tab.style.removeProperty("--pd-home-tab-offset");
+      if (!leaf.parent || leaf.parent.children.length !== 1) continue;
+      const tabTitle = leaf.tabHeaderInnerTitleEl;
+      const viewTitle = view.containerEl && view.containerEl.querySelector(".view-header-title");
+      if (!tabTitle || !viewTitle ||
+          typeof tabTitle.getBoundingClientRect !== "function" ||
+          typeof viewTitle.getBoundingClientRect !== "function") continue;
+      const tabRect = tabTitle.getBoundingClientRect();
+      const viewRect = viewTitle.getBoundingClientRect();
+      const offset = Math.round((viewRect.left + viewRect.right - tabRect.left - tabRect.right) / 2);
+      if (Number.isFinite(offset)) tab.style.setProperty("--pd-home-tab-offset", offset + "px");
     }
   }
 
   scheduleHomeArrival(file) {
     if (this._homeArrivalFrame) window.cancelAnimationFrame(this._homeArrivalFrame);
+    this.clearHomeArrivalRetry();
     const expectedPath = file && file.path;
     let framesLeft = 8;
+
+    /* Obsidian 有时会在 file-open 后继续恢复同一 leaf 的旧 mode。
+       只给这一次到达首页留一张补做券；用户一旦操作页面就撤销，
+       因而不会把随后主动进入编辑模式的动作弹回去。 */
+    const retry = shouldForcePreview(this.settings.forcePreview, this.settings.homePath, expectedPath, this.settings.previewPaths)
+      ? { file, leaf: null, first: null }
+      : null;
+    if (retry) {
+      this._homeArrivalRetry = retry;
+      const cancel = () => {
+        if (this._homeArrivalRetry === retry) this.clearHomeArrivalRetry();
+      };
+      this._homeArrivalCancelInput = cancel;
+      document.addEventListener("pointerdown", cancel, true);
+      document.addEventListener("keydown", cancel, true);
+      this._homeArrivalExpiry = window.setTimeout(cancel, 5000);
+    }
 
     const settle = () => {
       this._homeArrivalFrame = 0;
@@ -1851,7 +2557,12 @@ class PaperDeskPlugin extends Plugin {
         .some((leaf) => leaf.view && leaf.view.file && leaf.view.file.path === expectedPath);
 
       if (viewIsReady || !expectedPath) {
-        this.enforcePreview(file);
+        if (retry && this._homeArrivalRetry === retry) {
+          retry.leaf = this.app.workspace.activeLeaf;
+          retry.first = this.enforcePreview(file);
+        } else if (!retry) {
+          this.enforcePreview(file);
+        }
         return;
       }
 
@@ -1865,6 +2576,41 @@ class PaperDeskPlugin extends Plugin {
     };
 
     this._homeArrivalFrame = window.requestAnimationFrame(settle);
+  }
+
+  clearHomeArrivalRetry() {
+    this._homeArrivalRetry = null;
+    if (this._homeArrivalExpiry) window.clearTimeout(this._homeArrivalExpiry);
+    this._homeArrivalExpiry = 0;
+    if (this._homeArrivalCancelInput) {
+      document.removeEventListener("pointerdown", this._homeArrivalCancelInput, true);
+      document.removeEventListener("keydown", this._homeArrivalCancelInput, true);
+      this._homeArrivalCancelInput = null;
+    }
+  }
+
+  finishHomeArrival(leaf) {
+    const retry = this._homeArrivalRetry;
+    if (!retry || !retry.first) return;
+    const activeLeaf = leaf || this.app.workspace.activeLeaf;
+    const activeFile = this.app.workspace.getActiveFile();
+    if (activeLeaf !== retry.leaf || !activeFile || activeFile.path !== retry.file.path) {
+      this.clearHomeArrivalRetry();
+      return;
+    }
+
+    /* 这次打开的后续状态变化已经到达。等第一轮 setViewState 完全落定，
+       再检查是否被 Obsidian 恢复成 source；券先消费掉，避免自触发循环。 */
+    this.clearHomeArrivalRetry();
+    Promise.resolve(retry.first).then(() => {
+      window.requestAnimationFrame(() => {
+        const current = this.app.workspace.getActiveFile();
+        if (this.app.workspace.activeLeaf === retry.leaf &&
+            current && current.path === retry.file.path) {
+          this.enforcePreview(retry.file);
+        }
+      });
+    });
   }
 
   /**
@@ -1881,29 +2627,33 @@ class PaperDeskPlugin extends Plugin {
    * 切换阅读模式所用的公开路径：leaf.getViewState() → leaf.setViewState()。
    */
   async enforcePreview(file) {
-    if (!shouldForcePreview(this.settings.forcePreview, this.settings.homePath, file && file.path)) {
+    if (!shouldForcePreview(this.settings.forcePreview, this.settings.homePath, file && file.path, this.settings.previewPaths)) {
       return;
     }
     /* 重入闸门：setMode 是异步的，改完模式后可能再抛一次 file-open，
        而那一刻 getMode() 也许还报着旧值。没有这道闸门就会变成
        「切模式 → 触发事件 → 又切一次」的来回，最终把渲染线程钉住。
        一次 file-open 只允许真正动手一次。 */
-    if (this._forcingPreview) return;
+    if (this._forcingPreview) return this._previewPromise;
     this._forcingPreview = true;
+    this._previewPromise = this._forcePreviewNow(file);
     try {
-      await this._forcePreviewNow();
+      await this._previewPromise;
     } finally {
       this._forcingPreview = false;
+      this._previewPromise = null;
     }
   }
 
-  async _forcePreviewNow() {
-    const home = String(this.settings.homePath || "").trim();
+  async _forcePreviewNow(file) {
+    const targetPath = file && file.path;
     const modeChanges = [];
+    const activeLeaf = this.app.workspace.activeLeaf;
+    const candidates = activeLeaf ? [activeLeaf] : this.app.workspace.getLeavesOfType("markdown");
 
-    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+    for (const leaf of candidates) {
       const view = leaf.view;
-      if (!view || !view.file || view.file.path !== home) continue;
+      if (!view || !view.file || view.file.path !== targetPath) continue;
       if (typeof view.getMode !== "function") continue;
       if (view.getMode() !== "source") continue;
       if (typeof leaf.getViewState !== "function" || typeof leaf.setViewState !== "function") continue;
@@ -1947,6 +2697,43 @@ class PaperDeskPlugin extends Plugin {
     return out;
   }
 
+  /** 从不同的顶层工作区各拿最近的一篇，避免首页被同一门课的一串文件占满。
+      这是纯本地的 vault 索引：不联网、不调模型，也不依赖任何额度。 */
+  collectRecentThreads() {
+    const home = String(this.settings.homePath || "").trim().toLowerCase();
+    const excludes = (this.settings.threadExcludes || [])
+      .map((path) => String(path || "").trim().replace(/\/$/, "").toLowerCase())
+      .filter(Boolean);
+    const byArea = new Map();
+
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const path = String(file.path || "");
+      const normalized = path.toLowerCase();
+      const parts = path.split("/").filter(Boolean);
+      if (file.extension !== "md" || parts.length < 2) continue;
+      if (home && normalized === home) continue;
+      if (parts.some((part) => part.startsWith("."))) continue;
+      if (excludes.some((prefix) => normalized === prefix || normalized.startsWith(prefix + "/"))) continue;
+
+      const area = parts[0];
+      const mtime = Number(file.stat && file.stat.mtime) || 0;
+      const previous = byArea.get(area.toLowerCase());
+      if (previous && previous.mtime >= mtime) continue;
+      const cache = this.app.metadataCache.getFileCache(file);
+      byArea.set(area.toLowerCase(), {
+        area,
+        file,
+        mtime,
+        title: displayNameFor(file.basename, cache && cache.frontmatter),
+      });
+    }
+
+    const limit = Math.min(4, Math.max(1, Number(this.settings.threadCount) || 3));
+    return Array.from(byArea.values())
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, limit);
+  }
+
   /** 规则改了之后让已打开的区块重画。
       直接重画所有 markdown 视图 —— 只对当前那篇有意义，但代价可以忽略，
       而「去精准定位包含区块的那一篇」要多绕好几层 API。 */
@@ -1967,7 +2754,10 @@ class PaperDeskPlugin extends Plugin {
       if (!leaf) return;
       await leaf.setViewState({ type: VIEW_TYPE, active: true });
     }
-    workspace.revealLeaf(leaf);
+    // 已存在的计时器也要从折叠的右栏真正显示出来，并选中它。
+    // revealLeaf 是异步的；若不等它完成，点首页入口时可能看不出任何变化。
+    await workspace.revealLeaf(leaf);
+    workspace.setActiveLeaf(leaf, { focus: true });
   }
 
   /* ---- 计时器动作 ---- */

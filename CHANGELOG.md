@@ -1,5 +1,49 @@
 # Changelog
 
+## Unreleased
+
+- Kept long live-resume titles to one desk-note line, with the full name available on hover.
+  Homepage action outlines now stay unfilled and use a more legible two-column layout;
+  cramped panes stack them without overlap.
+- Added an opt-in `home-excerpt` block for the first prose paragraph under one linked
+  heading, and a live `{{resume}}` token for the existing desk note. Both are local and
+  read-only; missing targets leave no empty frame. The standalone resume block now refreshes
+  alongside the desk note.
+- Recalculate the homepage tab alignment when the note pane resizes, including when both
+  sidebars collapse, without changing other tabs or plugins.
+
+- Restored a centred, lightly surfaced desk note with a complete hand-drawn outline, and
+  gave each homepage action its own drawn border instead of one underline for the row.
+- The clock colon again blinks once per second unless reduced motion is preferred; seconds remain absent. Narrow-pane clock size increases
+  slightly without enlarging the wide layout.
+- Desk-note text now shares the configured handwriting font with the homepage sentence;
+  homepage actions keep Obsidian's text font for legibility.
+
+- Clock size is now adjustable (72 px by default) and responds to the actual note-pane
+  width instead of only the app window width.
+- Added separate, theme-colored border switches for the desk note and individual actions;
+  both remain editable from their existing sources.
+- Added a searchable file/folder picker for notes that should enter reading mode on arrival.
+  The list defaults empty, is independent of the homepage rule, and never blocks manual editing.
+- Narrow panes now stack the desk-delivery label above its text rather than squeezing it into
+  a tiny second column; the resume link also respects the note-pane width.
+
+- Refined the homepage hierarchy: a larger clock, unboxed handwritten desk note, quiet
+  text actions near the first-screen foot, and recent threads below that first screen.
+- The Focus timer entry now awaits the right sidebar opening and selects the existing timer
+  tab without creating another timer or starting a countdown.
+- Homepage actions now have independent switches. New note and Today default off, Focus
+  defaults on, and one custom-labelled note entry can be configured.
+- Added `home-brief`, a three-line note kept in the homepage itself. Its `{{resume}}` token
+  updates locally; other lines remain manually editable and need no automation or model quota.
+- Added `home-threads`, a local recent-work index that picks one note from each top-level
+  work area and supports path exclusions.
+- Added bilingual settings and a quiet paper-strip / index-line treatment for the new blocks.
+- Fixed a startup crash when saved Pomodoro rounds crossed into a new day; the crash could
+  leave the homepage unstyled and the timer view inactive.
+- Returning to the homepage now survives Obsidian's late restoration of editing mode,
+  without overriding a deliberate switch back to editing.
+
 ## 0.4.0
 
 **The homepage is a quiet front page again: it opens safely, returns to reading mode, and

@@ -4,17 +4,21 @@
    两条准则，从上一轮的设计讨论里定下来的：
    1. 颜色一律取主题变量（含 color-mix 混色）；只有【几何】是硬编码的。
       几何与主题无关，写死才对；颜色若写死，别人换个深色主题就看不见。
-   2. 装饰只出现在时钟这一处。像素只做冒号、手写只做一条线 ——
-      两者都不许再出现第二次，否则页面会从「一枚印章」变成「贴纸册」。
+   2. 时钟是唯一的主装饰；便笺与动作区可选的细线只负责轻微分组，
+      不能变成实底卡片，也不能影响其他插件的 DOM。
 
    所有类名前缀固定 .pd-
    ============================================================ */
 
 /* ============================ 时钟 ============================ */
 
+.pd-clock-host {
+  container-type: inline-size;
+}
+
 .pd-clock {
   /* 唯一的几何刻度来源：改这一个值，数字、方块、下划线按比例全部跟着走。 */
-  --pd-clock-size: 3.5rem; /* = 56px */
+  --pd-clock-size: min(var(--pd-clock-config-size, 72px), 19cqw);
 
   display: flex;
   flex-direction: column;
@@ -88,28 +92,20 @@
 }
 
 .pd-colon-dot {
-  width: calc(var(--pd-clock-size) * 0.16); /* 56px 字号下 = 9px */
+  width: calc(var(--pd-clock-size) * 0.16);
   height: calc(var(--pd-clock-size) * 0.16);
   background: currentColor;
-  /* steps(1, end)：每段保持起始值不变，于是正好是 1 秒亮、1 秒灭。
-     linear 会在临界处插值，看着像「渐隐了一下」。 */
+  /* 旧版的 1 秒亮、1 秒灭；数字与手绘线都不跟着跳动。 */
   animation: pd-blink 2s steps(1, end) infinite;
 }
 
 @keyframes pd-blink {
-  0% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
+  0% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
-/* 关掉动效偏好时保持常亮 —— 闪烁是装饰，不该强加给会不适的人。 */
 @media (prefers-reduced-motion: reduce) {
-  .pd-colon-dot {
-    animation: none;
-  }
+  .pd-colon-dot { animation: none; }
 }
 
 /* ---- 手绘横线 ---- */
@@ -121,14 +117,19 @@
   overflow: visible;
 }
 
-.pd-clock-stroke path {
+.pd-clock-stroke path,
+.pd-brief-frame path,
+.pd-action-frame path {
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
   stroke-linecap: round;
-  opacity: 0.45;
   /* viewBox 被非等比拉伸，non-scaling-stroke 保证线宽不被一起拉歪。 */
   vector-effect: non-scaling-stroke;
+}
+
+.pd-clock-stroke path {
+  stroke-width: 2;
+  opacity: 0.45;
 }
 
 /* ============================ 首页 ============================ */
@@ -147,6 +148,10 @@
 
 /* 首页保留原生标签标题与关闭按钮，但标题的中心不再被右侧按钮挤偏。
    只标记首页对应的 tabHeaderEl，绝不改变其他标签页。 */
+.pd-is-home-tab {
+  translate: var(--pd-home-tab-offset, 0px) 0;
+}
+
 .pd-is-home-tab .workspace-tab-header-inner {
   position: relative;
   justify-content: center;
@@ -164,8 +169,7 @@
 }
 
 /* ---- 首页辅助带 ----
-   日期、继续入口、轻动作与固定入口都比手写句低一个层级。动作只借一层
-   极淡的纸签边界说明“这里可点”，没有阴影、图标或第二套装饰。 */
+   日期、继续入口、动作与固定入口都比手写句低一个层级。 */
 
 .pd-date {
   margin: -2.2rem auto 0;
@@ -190,7 +194,7 @@
 .pd-resume {
   gap: 0.65em;
   margin: 3.5rem auto 0;
-  max-width: min(40rem, 88vw);
+  max-width: min(40rem, calc(100% - 2rem));
 }
 
 .pd-resume-label {
@@ -206,7 +210,7 @@
 .pd-resume-link {
   display: inline-block;
   min-width: 0;
-  max-width: min(32rem, 72vw);
+  max-width: min(32rem, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -220,8 +224,43 @@
 }
 
 .pd-actions {
-  gap: 0.75rem;
-  margin-top: 1.4rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(16rem, calc(100% - 1rem));
+  gap: clamp(0.3rem, 2cqw, 0.8rem);
+  font-family: var(--font-text);
+  /* 动作在首屏下缘，但仍在正文流内；滚动时不粘住页面。 */
+  margin-top: clamp(3rem, calc(100dvh - 39rem), 14rem);
+  margin-inline: auto;
+}
+
+.pd-actions:has(> .pd-action:only-child) {
+  grid-template-columns: 1fr;
+  width: fit-content;
+}
+
+.pd-actions > .pd-action:last-child:nth-child(odd):not(:only-child) {
+  grid-column: 1 / -1;
+  justify-self: center;
+}
+
+.pd-actions-host {
+  container-type: inline-size;
+}
+
+/* 双侧栏挤窄正文时，让两个入口各占一行，避免字和手绘框互相压住。 */
+@container (max-width: 22rem) {
+  .pd-actions {
+    grid-template-columns: 1fr;
+    width: min(8rem, calc(100% - 1rem));
+    gap: 0.5rem;
+  }
+
+  .pd-actions > .pd-action:last-child:nth-child(odd):not(:only-child) {
+    grid-column: auto;
+    justify-self: stretch;
+  }
 }
 
 .pd-pins {
@@ -233,30 +272,204 @@
    .pd-action 权重不够，会重新长成带阴影的系统按钮。 */
 .pd-actions .pd-action {
   appearance: none;
-  min-height: 0;
-  padding: 0.48rem 0.82rem;
-  border: 1px solid color-mix(in srgb, var(--text-faint) 42%, transparent);
-  border-radius: 0.35rem;
-  background: color-mix(in srgb, var(--background-primary) 94%, var(--text-normal) 6%);
+  position: relative;
+  min-height: 2.75rem;
+  min-width: 0;
+  padding: 0.5rem 0.35rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
   color: var(--text-muted);
   font: inherit;
+  font-size: clamp(0.72rem, 2.2cqw, 0.85rem);
   line-height: 1.2;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+.pd-action-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  color: var(--text-muted);
+}
+
+.pd-action-frame path {
+  stroke-width: 1.7;
+  opacity: 0.64;
 }
 
 .pd-actions .pd-action:hover,
 .pd-actions .pd-action:focus-visible {
-  border-color: color-mix(in srgb, var(--text-muted) 58%, transparent);
-  background: color-mix(in srgb, var(--background-primary) 89%, var(--text-normal) 11%);
+  background: transparent;
   color: var(--text-normal);
   box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 0.35em;
+}
+
+.pd-actions .pd-action:hover .pd-action-frame path,
+.pd-actions .pd-action:focus-visible .pd-action-frame path {
+  opacity: 0.8;
 }
 
 .pd-actions .pd-action:focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
+}
+
+/* 与整页共用纸纹；外框是一笔闭合的手绘线，而不是一块贴上的底色。 */
+.pd-brief {
+  container-type: inline-size;
+  position: relative;
+  width: min(34rem, calc(100% - 1.5rem));
+  margin: 3.5rem auto 0;
+  padding: 1.1rem 1.7rem;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.pd-brief-host {
+  container-type: inline-size;
+}
+
+.pd-brief-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  color: var(--text-muted);
+}
+
+.pd-brief-frame path {
+  stroke-width: 1.5;
+  opacity: 0.5;
+}
+
+.pd-brief-line {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: baseline;
+  max-width: 15.5rem;
+  margin-inline: auto;
+  padding: 0.45rem 0;
+  line-height: 1.65;
+}
+
+.pd-brief-label {
+  color: var(--text-faint);
+  font-family: var(--pd-handwriting, var(--font-text));
+  font-size: 0.88rem;
+  letter-spacing: 0.1em;
+  text-align: right;
+}
+
+.pd-brief-text {
+  color: var(--text-muted);
+  font-family: var(--pd-handwriting, var(--font-text));
+  font-size: 1.08rem;
+  letter-spacing: 0.02em;
+}
+
+.pd-brief-resume-link {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pd-brief-resume-link:hover,
+.pd-brief-resume-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.pd-brief-line:first-child .pd-brief-text {
+  color: var(--text-normal);
+}
+
+/* 单条指定笔记摘录：沿用纸面的留白，不把正文装成新的信息卡片。 */
+.pd-excerpt {
+  width: min(34rem, calc(100% - 1.5rem));
+  margin: 2.5rem auto 0;
+  color: var(--text-normal);
+  text-align: center;
+}
+
+.pd-excerpt-body {
+  font-family: var(--font-text);
+  font-size: 0.96rem;
+  line-height: 1.7;
+}
+
+.pd-excerpt-body p {
+  margin: 0;
+}
+
+.pd-excerpt-source {
+  display: inline-block;
+  margin-top: 0.7rem;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 0.8rem);
+  text-decoration: none;
+}
+
+.pd-excerpt-source:hover,
+.pd-excerpt-source:focus-visible {
+  color: var(--text-normal);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* 最近线索放在首屏之后；它是回访用的索引，不与时钟争首屏。 */
+.pd-threads {
+  width: min(35rem, calc(100% - 3rem));
+  margin: clamp(7rem, 20vh, 13rem) auto 0;
+}
+
+.pd-thread {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.34rem 0;
+  line-height: 1.5;
+}
+
+.pd-thread-area {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller, 0.78rem);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pd-thread-link {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pd-thread-link:hover {
+  color: var(--text-normal);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
 }
 
 /* ---- 手写句 ---- */
@@ -344,20 +557,10 @@
 
 /* ============================ 窄屏 ============================ */
 
-/* 手机竖屏，以及桌面端把笔记拖到很窄的一栏 —— 两种情况的解法是同一个。
-
-   要收敛的其实只有一件事：--pd-clock-size。这个文件里所有几何（数字、方块、
-   手绘横线）都由它算出来，所以改这一个值就按比例全部变小，
-   不必为每条规则各写一个断点 —— 那正是变量存在的理由。
-
-   用 clamp 而不是固定值：在 320px 到 560px 之间让它连续变化。
-   在某一点突跳会让「手机转到竖屏」看起来像出了故障。
-   下限 2.25rem（36px）是数字还能清楚读出的尺寸，再小就退回正文了；
-   上限 3.25rem 让竖屏的平板不至于跟桌面一样占地方。 */
+/* 窗口真的变窄时收起纵向留白；笔记栏被侧栏挤窄的情况则由
+   时钟代码块和便笺各自的容器宽度处理，不触碰工作区布局。 */
 @media (max-width: 560px) {
   .pd-clock {
-    --pd-clock-size: clamp(2.25rem, 11vw, 3.25rem);
-
     /* 上下留白也要一起收。桌面那 5rem 是为了让时钟「落在纸上」的那份重量，
        在小屏上那份重量会变成半屏空白，把内容顶下去。 */
     padding: 3.25rem 0 2.25rem;
@@ -370,10 +573,113 @@
     box-sizing: border-box;
   }
 
+  .pd-brief,
+  .pd-threads {
+    width: calc(100% - 1rem);
+  }
+
+  .pd-thread {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
   /* 链接区底部那 6rem 同理：滚动到底时小屏不需要那么多余的空。 */
   .pd-links {
     padding-bottom: 3.5rem;
   }
+}
+
+/* 桌面双侧栏或分屏时，窗口可能很宽但实际笔记栏只有二三百像素。
+   这里看便笺自己的宽度，绝不改 Obsidian 的工作区或文件树。 */
+@container (max-width: 23rem) {
+  .pd-brief {
+    width: calc(100% - 2.5rem);
+    margin-left: 0;
+    margin-right: auto;
+    padding: 0.9rem 0.75rem;
+  }
+
+  .pd-brief-line {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 0.6rem;
+    row-gap: 0;
+    padding-block: 0.35rem;
+  }
+
+  .pd-brief-label {
+    flex: 0 0 auto;
+    text-align: left;
+  }
+
+  .pd-brief-text {
+    flex: 1 1 4.2rem;
+    min-width: 0;
+    font-size: 1rem;
+  }
+
+  .pd-actions {
+    margin-top: 3rem;
+    width: calc(100% - 2.5rem);
+    max-width: none;
+    margin-left: 0;
+    margin-right: auto;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .pd-actions .pd-action {
+    flex: 0 1 auto;
+    min-width: 5.3rem;
+    padding-inline: 0.4rem;
+    white-space: nowrap;
+  }
+}
+
+/* 设置页的路径选择窗口只用 .pd- 前缀，不覆盖 Obsidian 或其他插件的树。 */
+.pd-preview-picker input[type="search"] {
+  width: 100%;
+  margin-block: 0.8rem;
+}
+
+.pd-preview-picker-hint {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.pd-preview-tree {
+  max-height: min(52vh, 30rem);
+  overflow: auto;
+  border-block: 1px solid var(--background-modifier-border);
+  padding-block: 0.4rem;
+}
+
+.pd-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2rem;
+  color: var(--text-normal);
+}
+
+.pd-preview-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.pd-preview-row .pd-preview-expand {
+  width: 1.5rem;
+  min-width: 1.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.pd-preview-picker-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
 
 /* ======================= 专注计时器（侧栏） ======================= */

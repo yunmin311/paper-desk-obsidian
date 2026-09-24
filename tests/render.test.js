@@ -74,7 +74,19 @@ class El {
     }
   }
   getAttribute(k) { return this.attrs[k]; }
-  addEventListener() {} removeEventListener() {}
+  addEventListener(name, callback) {
+    (this._listeners = this._listeners || new Map());
+    if (!this._listeners.has(name)) this._listeners.set(name, []);
+    this._listeners.get(name).push(callback);
+  }
+  removeEventListener(name, callback) {
+    if (this._listeners?.has(name)) {
+      this._listeners.set(name, this._listeners.get(name).filter((fn) => fn !== callback));
+    }
+  }
+  async fire(name) {
+    for (const callback of this._listeners?.get(name) || []) await callback({ target: this });
+  }
   querySelector() { return null; }
   querySelectorAll() { return []; }
   createEl(t, o) { return this.appendChild(makeEl(t, o)); }
@@ -97,6 +109,7 @@ function makeEl(tag, o) {
 }
 
 const bodyEl = new El("body");
+const documentEvents = new Map();
 let nextFrameId = 1;
 let animationFrames = [];
 function flushAnimationFrames() {
@@ -111,7 +124,11 @@ globalThis.document = {
   createTextNode: (t) => { const e = new El("#text"); e._text = String(t); return e; },
   querySelector: () => null,
   querySelectorAll: () => [],
-  addEventListener() {}, removeEventListener() {},
+  addEventListener(name, callback) {
+    if (!documentEvents.has(name)) documentEvents.set(name, new Set());
+    documentEvents.get(name).add(callback);
+  },
+  removeEventListener(name, callback) { documentEvents.get(name)?.delete(callback); },
 };
 globalThis.window = {
   eval,
@@ -191,7 +208,17 @@ function makeLeaf(view) {
 }
 
 let leaves = [];
-const workspaceEvents = {};
+const workspaceEvents = new Map();
+function emitWorkspaceEvent(name, value) {
+  for (const callback of [...(workspaceEvents.get(name) || [])]) callback(value);
+}
+const vaultEvents = new Map();
+function emitVaultEvent(name, value) {
+  for (const callback of [...(vaultEvents.get(name) || [])]) callback(value);
+}
+async function flushPromises() {
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+}
 
 const api = {
   /* Component.load() 在真机里触发 onload()。缺了这一步，所有 MarkdownRenderChild
@@ -199,20 +226,31 @@ const api = {
   Component: class Component {
     constructor() { this._loaded = false; }
     load() { if (!this._loaded) { this._loaded = true; if (this.onload) this.onload(); } return this; }
-    unload() { if (this._loaded) { this._loaded = false; if (this.onunload) this.onunload(); } return this; }
+    unload() {
+      if (this._loaded) {
+        this._loaded = false;
+        if (this.onunload) this.onunload();
+        for (const ref of this._eventRefs || []) ref.off();
+      }
+      return this;
+    }
     onload() {} onunload() {}
-    register() {} registerEvent() {} registerDomEvent() {}
+    register() {} registerEvent(ref) { (this._eventRefs = this._eventRefs || []).push(ref); } registerDomEvent() {}
     registerInterval() { return 0; }
     addChild(c) { return c && c.load ? c.load() : c; }
     removeChild(c) { return c; }
   },
   Plugin: class Plugin {
     constructor(app, manifest) { this.app = app; this.manifest = manifest; }
+    unload() {
+      if (this.onunload) this.onunload();
+      for (const ref of this._eventRefs || []) ref.off();
+    }
     async loadData() { return null; }
     async saveData() {}
     addSettingTab() {} addCommand() {} addRibbonIcon() { return new El("div"); }
     addStatusBarItem() { return new El("div"); }
-    registerView() {} registerEvent() {} registerDomEvent() {}
+    registerView() {} registerEvent(ref) { (this._eventRefs = this._eventRefs || []).push(ref); } registerDomEvent() {}
     registerMarkdownPostProcessor() {} registerEditorExtension() {}
     registerInterval() { return 0; }
     registerMarkdownCodeBlockProcessor(lang, fn) {
@@ -227,6 +265,14 @@ const api = {
     setName() { return this; } setDesc() { return this; }
   },
   Notice: class Notice { constructor() {} hide() {} },
+  Modal: class Modal {
+    constructor(app) { this.app = app; this.contentEl = new El("div"); }
+    open() { this.onOpen(); }
+    close() { this.onClose(); }
+  },
+  MarkdownRenderer: {
+    async render(app, markdown, el) { el.setText(markdown); },
+  },
   MarkdownView: class MarkdownView {},
   TFile: class TFile {},
 };
@@ -250,8 +296,22 @@ const app = {
     getMarkdownFiles: () => app.__files || [],
     getAbstractFileByPath: (p) =>
       (app.__files || []).find((f) => f.path === p) || null,
+    cachedRead: async (file) => (app.__notes || {})[file.path] || "",
+    on: (name, callback) => {
+      if (!vaultEvents.has(name)) vaultEvents.set(name, []);
+      vaultEvents.get(name).push(callback);
+      return { off: () => vaultEvents.set(name, (vaultEvents.get(name) || []).filter((fn) => fn !== callback)) };
+    },
   },
-  metadataCache: { getFileCache: (f) => (app.__caches || {})[f.path] || null },
+  metadataCache: {
+    getFileCache: (f) => (app.__caches || {})[f.path] || null,
+    getFirstLinkpathDest: (linkpath, sourcePath) => {
+      const sourceFolder = sourcePath?.includes("/") ? sourcePath.slice(0, sourcePath.lastIndexOf("/")) : "";
+      const preferred = sourceFolder ? sourceFolder + "/" + linkpath + ".md" : linkpath + ".md";
+      return (app.__files || []).find((file) => file.path === preferred) ||
+        (app.__files || []).find((file) => file.path === linkpath + ".md") || null;
+    },
+  },
   commands: {
     executeCommandById: (id) => {
       (app.__commands = app.__commands || []).push(id);
@@ -265,12 +325,15 @@ const app = {
     getRightLeaf: () => ({ view: null }),
     getLeaf: () => ({ view: null, openFile: async () => {} }),
     on: (name, callback) => {
-      workspaceEvents[name] = callback;
-      return {};
+      if (!workspaceEvents.has(name)) workspaceEvents.set(name, []);
+      workspaceEvents.get(name).push(callback);
+      return { off: () => workspaceEvents.set(name, (workspaceEvents.get(name) || []).filter((fn) => fn !== callback)) };
     },
     onLayoutReady: (cb) => { app.__layoutReady = cb; },
     revealLeaf: async () => {},
-    openLinkText: async () => {},
+    openLinkText: async (path) => {
+      (app.__openedLinks = app.__openedLinks || []).push(path);
+    },
   },
 };
 
@@ -301,8 +364,9 @@ function eq(label, got, want) {
   const w = JSON.stringify(want);
   ok(label, g === w, `得到 ${g}\n     期望 ${w}`);
 }
-function text(el) { return String(el.textContent || "").trim(); }
+function text(el) { return String(el?.textContent || "").trim(); }
 function find(el, cls) {
+  if (!el) return null;
   for (const c of el.children) {
     if (c.classList.contains(cls)) return c;
     const deeper = find(c, cls);
@@ -336,8 +400,24 @@ globalThis.Date = class extends RealDate {
   eq(
     "onload 后续步骤失败时全部首页代码块仍已注册",
     (interruptedPlugin._codeBlocks || []).map(([lang]) => lang).sort(),
-    ["clock", "home-actions", "home-date", "home-links", "home-note", "home-pins", "home-resume"]
+    ["clock", "home-actions", "home-brief", "home-date", "home-excerpt", "home-links", "home-note", "home-pins", "home-resume", "home-threads"]
   );
+
+  /* 真机 data.json 留有昨天的 12 轮。这个分支曾把 Date.now() 数字传给
+     只接受 Date 的 dayKey，导致插件在注册代码块之后、注册视图之前中断。 */
+  const overnightPlugin = new PluginClass(app, { id: "paper-desk", version: "0.4.0" });
+  overnightPlugin.loadData = async () => ({
+    timer: { completed: 12, day: "2026-09-21" },
+  });
+  let overnightError = null;
+  try {
+    await overnightPlugin.onload();
+  } catch (error) {
+    overnightError = error;
+  }
+  ok("跨天已有轮次时插件仍能完整启动", !overnightError, overnightError && overnightError.message);
+  if (!overnightError) eq("跨天已有轮次在启动时清零", overnightPlugin.timer.completed, 0);
+  if (!overnightError) overnightPlugin.unload();
 
   const plugin = new PluginClass(app, { id: "paper-desk", version: "0.4.0" });
   await plugin.onload();
@@ -345,11 +425,14 @@ globalThis.Date = class extends RealDate {
   const blocks = new Map((plugin._codeBlocks || []).map(([l, fn]) => [l, fn]));
 
   /* 走一遍处理器：ctx.addChild → load() → onload()，与真机同一条路径 */
-  function renderBlock(lang, source) {
+  function renderBlock(lang, source, sourcePath = "homepage.md") {
     const fn = blocks.get(lang);
     if (!fn) return null; // 没注册就是没注册，交给断言去报
     const el = new El("div");
-    const ctx = { addChild: (c) => (c && c.load ? c.load() : c) };
+    const ctx = { sourcePath, addChild: (c) => {
+      el._child = c;
+      return c && c.load ? c.load() : c;
+    } };
     fn(source || "", el, ctx);
     return el;
   }
@@ -363,6 +446,9 @@ globalThis.Date = class extends RealDate {
   ok("home-resume 区块已注册", blocks.has("home-resume"));
   ok("home-actions 区块已注册", blocks.has("home-actions"));
   ok("home-pins 区块已注册", blocks.has("home-pins"));
+  ok("home-brief 区块已注册", blocks.has("home-brief"));
+  ok("home-excerpt 区块已注册", blocks.has("home-excerpt"));
+  ok("home-threads 区块已注册", blocks.has("home-threads"));
 
   const clockEl = renderBlock("clock", "");
   const timeRow = clockEl && find(clockEl, "pd-clock-time");
@@ -375,6 +461,14 @@ globalThis.Date = class extends RealDate {
     timeRow ? `实际：${text(timeRow)}` : "(没有时间行)"
   );
   ok("clock 画出了手绘横线", !!clockEl && !!find(clockEl, "pd-clock-stroke"));
+  const colonDots = find(clockEl, "pd-clock-colon-dots");
+  ok("时钟冒号不被行内样式关掉旧版闪烁", !!colonDots && colonDots.children.length === 2 &&
+    colonDots.children.every((dot) => dot.style.animation !== "none"));
+  eq("时钟默认字号为 72px", find(clockEl, "pd-clock")?.style.getPropertyValue("--pd-clock-config-size"), "72px");
+  plugin.settings.clockSize = 80;
+  const largerClock = renderBlock("clock", "");
+  eq("时钟字号可以独立配置", find(largerClock, "pd-clock")?.style.getPropertyValue("--pd-clock-config-size"), "80px");
+  plugin.settings.clockSize = 72;
 
   const noteEl = renderBlock(
     "home-note",
@@ -421,17 +515,135 @@ globalThis.Date = class extends RealDate {
   eq("home-resume 指向最近的非首页笔记", resumeLink && resumeLink.attrs.href, "clutter/some-note.md");
 
   app.__commands = [];
+  app.__openedLinks = [];
   const actionsEl = renderBlock("home-actions", "");
   const actions = actionsEl && find(actionsEl, "pd-actions");
-  eq("home-actions 只有三个轻动作", actions ? actions.children.length : -1, 3);
+  ok("动作区拥有自己的窄栏容器，不改变 Obsidian 工作区", !!actionsEl && actionsEl.classList.contains("pd-actions-host"));
+  eq("home-actions 默认只保留真正使用的专注入口", actions ? actions.children.filter((child) => child.tagName === "BUTTON").length : -1, 1);
   for (const action of actions ? actions.children : []) {
     if (typeof action.onclick === "function") action.onclick({ preventDefault() {} });
   }
   eq(
-    "三个轻动作走现有命令，不自建第二套流程",
+    "默认动作走现有专注命令，不自建第二套流程",
     app.__commands,
-    ["file-explorer:new-file", "daily-notes", "paper-desk:open-timer"]
+    ["paper-desk:open-timer"]
   );
+
+  plugin.settings.showActionNew = true;
+  plugin.settings.showActionDaily = false;
+  plugin.settings.showActionFocus = true;
+  plugin.settings.showActionFixed = true;
+  plugin.settings.fixedActionLabel = "课程入口";
+  plugin.settings.fixedActionPath = "YEAR3/CSI201/_CSI201 Index.md";
+  app.__commands = [];
+  app.__openedLinks = [];
+  const configuredActionsEl = renderBlock("home-actions", "");
+  const configuredActions = configuredActionsEl && find(configuredActionsEl, "pd-actions");
+  eq("home-actions 按独立开关只渲染选中的按钮", configuredActions ? configuredActions.children.filter((child) => child.tagName === "BUTTON").length : -1, 3);
+  ok("三个动作各有自己的闭合手绘包边", !!configuredActions && configuredActions.children.filter((child) => child.tagName === "BUTTON").every((button) => {
+    const frame = find(button, "pd-action-frame");
+    return !!frame && /[zZ]\s*$/.test(frame.children[0]?.attrs.d || "");
+  }));
+  ok("固定入口使用设置里的名称", !!configuredActions && text(configuredActions).includes("课程入口"));
+  for (const action of configuredActions ? configuredActions.children : []) {
+    if (typeof action.onclick === "function") action.onclick({ preventDefault() {} });
+  }
+  eq("启用的内置动作仍走原命令", app.__commands, ["file-explorer:new-file", "paper-desk:open-timer"]);
+  eq("固定入口打开设置里的笔记", app.__openedLinks, ["YEAR3/CSI201/_CSI201 Index.md"]);
+
+  /* 专注动作不能只证明命令被调用：右侧已有计时器但侧栏收起时，
+     必须等它真正显示，再让该页签成为当前焦点；不能重建或启动倒计时。 */
+  const originalGetLeaves = app.workspace.getLeavesOfType;
+  const originalGetRightLeaf = app.workspace.getRightLeaf;
+  const originalRevealLeaf = app.workspace.revealLeaf;
+  const originalSetActiveLeaf = app.workspace.setActiveLeaf;
+  const timerLeaf = { view: { getViewType: () => "paper-desk-timer" } };
+  let sidebarVisible = false;
+  let timerWasFocused = false;
+  let createdTimerLeaves = 0;
+  app.workspace.getLeavesOfType = (type) =>
+    type === "paper-desk-timer" ? [timerLeaf] : originalGetLeaves(type);
+  app.workspace.getRightLeaf = () => { createdTimerLeaves++; return null; };
+  app.workspace.revealLeaf = async (leaf) => {
+    await Promise.resolve();
+    sidebarVisible = leaf === timerLeaf;
+  };
+  app.workspace.setActiveLeaf = (leaf, options) => {
+    timerWasFocused = sidebarVisible && leaf === timerLeaf && options?.focus === true;
+  };
+  await plugin.activateView();
+  ok("专注入口展开右侧栏并选中已有计时器", sidebarVisible && timerWasFocused);
+  eq("专注入口不创建重复计时器", createdTimerLeaves, 0);
+  eq("打开计时器不启动倒计时", plugin.timer.running, false);
+
+  const newTimerLeaf = {
+    view: null,
+    async setViewState(next) {
+      if (next.type === "paper-desk-timer") this.view = { getViewType: () => next.type };
+    },
+  };
+  app.workspace.getLeavesOfType = (type) =>
+    type === "paper-desk-timer" ? [] : originalGetLeaves(type);
+  app.workspace.getRightLeaf = () => { createdTimerLeaves++; return newTimerLeaf; };
+  sidebarVisible = false;
+  timerWasFocused = false;
+  app.workspace.revealLeaf = async (leaf) => {
+    sidebarVisible = leaf === newTimerLeaf && leaf.view?.getViewType() === "paper-desk-timer";
+  };
+  app.workspace.setActiveLeaf = (leaf, options) => {
+    timerWasFocused = sidebarVisible && leaf === newTimerLeaf && options?.focus === true;
+  };
+  await plugin.activateView();
+  ok("尚无计时器时在右侧创建并显示它", sidebarVisible && timerWasFocused);
+  eq("尚无计时器时只创建一个", createdTimerLeaves, 1);
+  app.workspace.getLeavesOfType = originalGetLeaves;
+  app.workspace.getRightLeaf = originalGetRightLeaf;
+  app.workspace.revealLeaf = originalRevealLeaf;
+  app.workspace.setActiveLeaf = originalSetActiveLeaf;
+
+  plugin.settings.showBrief = true;
+  const briefEl = renderBlock(
+    "home-brief",
+    "# Codex 有内容时才更新\n继续：把 Paper Desk 收口\n发现：课程与项目可以并行接续\n收口：确认首页视觉\n第四条：不该出现"
+  );
+  ok("纸条拥有自己的窄栏容器，不修改其他插件的刻度", !!briefEl && briefEl.classList.contains("pd-brief-host"));
+  const brief = briefEl && find(briefEl, "pd-brief");
+  eq("案头投递只显示三条并忽略注释", brief ? brief.children.filter((child) => child.classList.contains("pd-brief-line")).length : -1, 3);
+  ok("案头投递保留标签与内容", !!brief && text(brief).includes("继续") && text(brief).includes("把 Paper Desk 收口"));
+  ok("案头投递不把第四条挤进首页", !!brief && !text(brief).includes("第四条"));
+  ok("案头投递默认有完整手绘边框", !!brief && brief.classList.contains("pd-brief-outlined"));
+  const briefFrame = brief && find(brief, "pd-brief-frame");
+  ok("纸条边框是包住三行的闭合路径，而不是底下一条线", !!briefFrame && /[zZ]\s*$/.test(briefFrame.children[0]?.attrs.d || "") && !find(brief, "pd-brief-stroke"));
+  plugin.settings.briefOutline = false;
+  const plainBrief = find(renderBlock("home-brief", "继续：还在纸上"), "pd-brief");
+  ok("案头投递边框可单独关闭", !!plainBrief && !plainBrief.classList.contains("pd-brief-outlined"));
+  ok("关闭纸条边框后不渲染边框", !!plainBrief && !find(plainBrief, "pd-brief-frame"));
+  plugin.settings.briefOutline = true;
+  ok("动作区默认启用各按钮手绘包边", !!actions && actions.classList.contains("pd-actions-outlined"));
+  ok("单个动作有闭合包边且整排没有共用底线", !!actions && !!find(actions.children[0], "pd-action-frame") && !find(actions, "pd-actions-stroke"));
+  plugin.settings.actionsOutline = false;
+  const plainActions = find(renderBlock("home-actions", ""), "pd-actions");
+  ok("动作区手绘包边可单独关闭", !!plainActions && !plainActions.classList.contains("pd-actions-outlined"));
+  ok("关闭动作包边后只留下文字入口", !!plainActions && !find(plainActions, "pd-action-frame"));
+  plugin.settings.actionsOutline = true;
+
+  app.__files = [
+    { path: "homepage.md", basename: "homepage", extension: "md", stat: { mtime: 999 } },
+    { path: ".workbuddy/memory/today.md", basename: "today", extension: "md", stat: { mtime: 998 } },
+    { path: "clutter/debug.md", basename: "debug", extension: "md", stat: { mtime: 997 } },
+    { path: "YEAR3/CSI201/Lecture 03.md", basename: "Lecture 03", extension: "md", stat: { mtime: 900 } },
+    { path: "YEAR3/EEE211/Tutorial 03.md", basename: "Tutorial 03", extension: "md", stat: { mtime: 850 } },
+    { path: "project/creative-os-notes/README.md", basename: "README", extension: "md", stat: { mtime: 800 } },
+    { path: "Compound Interest/Aesthetic/FACE.md", basename: "FACE", extension: "md", stat: { mtime: 700 } },
+  ];
+  plugin.settings.showThreads = true;
+  plugin.settings.threadCount = 3;
+  plugin.settings.threadExcludes = ["clutter"];
+  const threadsEl = renderBlock("home-threads", "");
+  const threads = threadsEl && find(threadsEl, "pd-threads");
+  eq("最近线索从不同工作区域各取一条", threads ? threads.children.length : -1, 3);
+  ok("最近线索包含课程、项目与审美区域", !!threads && text(threads).includes("YEAR3") && text(threads).includes("project") && text(threads).includes("Compound Interest"));
+  ok("最近线索过滤隐藏目录、首页和排除项", !!threads && !text(threads).includes("workbuddy") && !text(threads).includes("debug") && !text(threads).includes("homepage"));
 
   const pinsEl = renderBlock(
     "home-pins",
@@ -451,18 +663,44 @@ globalThis.Date = class extends RealDate {
   const emptyLeaf = makeLeaf(emptyView);
   leaves = [homeLeaf, otherLeaf, emptyLeaf];
 
+  // The tab strip and the view header can have different centers under a theme.
+  // Align the homepage tab to the visible filename, not merely within its own tab.
+  let homeTabResizeObserver = null;
+  globalThis.ResizeObserver = class {
+    constructor(callback) { this.callback = callback; homeTabResizeObserver = this; }
+    observe(element) { this.observed = element; }
+    disconnect() { this.observed = null; }
+  };
+  homeLeaf.parent = { children: [homeLeaf] };
+  homeLeaf.tabHeaderInnerTitleEl = new El("div");
+  homeLeaf.tabHeaderInnerTitleEl.getBoundingClientRect = () => ({ left: 130, right: 210 });
+  const homeHeaderTitle = new El("div");
+  let homeHeaderCenter = 260;
+  homeHeaderTitle.getBoundingClientRect = () => ({ left: homeHeaderCenter - 40, right: homeHeaderCenter + 40 });
+  homeView.containerEl.querySelector = (selector) =>
+    selector === ".view-header-title" ? homeHeaderTitle : null;
+
   plugin.settings.hideTitle = true;
   plugin.markHomeViews();
+  flushAnimationFrames();
   ok("首页那一格被打上标记", homeView.containerEl.classList.contains("pd-is-home"));
   ok("首页标签页得到独立居中标记", homeLeaf.tabHeaderEl.classList.contains("pd-is-home-tab"));
+  eq("首页标签文字对齐视图标题的中心", homeLeaf.tabHeaderEl.style.getPropertyValue("--pd-home-tab-offset"), "90px");
+  homeHeaderCenter = 350; // sidebars collapse: pane moves without a window resize
+  if (homeTabResizeObserver) homeTabResizeObserver.callback();
+  flushAnimationFrames();
+  eq("侧栏收起改变笔记栏宽度后仍重新对齐", homeLeaf.tabHeaderEl.style.getPropertyValue("--pd-home-tab-offset"), "180px");
   ok("其他笔记那一格没被打标记", !otherView.containerEl.classList.contains("pd-is-home"));
   ok("其他标签页没有居中标记", !otherLeaf.tabHeaderEl.classList.contains("pd-is-home-tab"));
+  eq("其他标签页没有位移", otherLeaf.tabHeaderEl.style.getPropertyValue("--pd-home-tab-offset"), "");
   ok("空那一格没被打标记", !emptyView.containerEl.classList.contains("pd-is-home"));
 
   // 换首页：旧的那格必须把标记退回去，否则分屏时会两边都被藏掉
   plugin.settings.homePath = "clutter/some-note.md";
   plugin.markHomeViews();
+  flushAnimationFrames();
   ok("换首页后旧的那格标记被摘掉", !homeView.containerEl.classList.contains("pd-is-home"));
+  eq("离开首页后标签位移被清除", homeLeaf.tabHeaderEl.style.getPropertyValue("--pd-home-tab-offset"), "");
   ok("换首页后新的首页被打上标记", otherView.containerEl.classList.contains("pd-is-home"));
 
   /* ============ 3. 整组关闭：路径为空时什么都不做 ============ */
@@ -538,7 +776,7 @@ globalThis.Date = class extends RealDate {
   arrivingView._setModeForTest("source");
   leaves = [arrivingLeaf];
   app.__activeFile = { path: "homepage.md" };
-  workspaceEvents["file-open"]({ path: "homepage.md" });
+  emitWorkspaceEvent("file-open", { path: "homepage.md" });
   arrivingView.file = { path: "homepage.md", basename: "homepage", extension: "md" };
   flushAnimationFrames();
   await Promise.resolve();
@@ -552,7 +790,7 @@ globalThis.Date = class extends RealDate {
   slowlyArrivingView._setModeForTest("source");
   leaves = [slowlyArrivingLeaf];
   app.__activeFile = { path: "homepage.md" };
-  workspaceEvents["file-open"]({ path: "homepage.md" });
+  emitWorkspaceEvent("file-open", { path: "homepage.md" });
   flushAnimationFrames();
   await Promise.resolve();
   eq("首页视图尚未就位时不会误改上一页", slowlyArrivingView.getMode(), "source");
@@ -561,6 +799,113 @@ globalThis.Date = class extends RealDate {
   await Promise.resolve();
   await Promise.resolve();
   eq("首页晚于第一帧就位时仍会进入阅读模式", slowlyArrivingView.getMode(), "preview");
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+
+  /* 实机又出现更晚的一步：第一次强制阅读已经执行，Obsidian 的打开流程
+     随后恢复了旧的 source 状态，并触发 active-leaf-change。只等视图就位
+     仍然太早；这次到达首页必须在恢复后补上阅读模式。 */
+  const restoredView = makeView("homepage.md");
+  const restoredLeaf = makeLeaf(restoredView);
+  leaves = [restoredLeaf];
+  app.workspace.activeLeaf = restoredLeaf;
+  app.__activeFile = { path: "homepage.md" };
+  emitWorkspaceEvent("file-open", { path: "homepage.md" });
+  flushAnimationFrames();
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  eq("首次到达先尝试阅读模式", restoredView.getMode(), "preview");
+  restoredView._setModeForTest("source");
+  emitWorkspaceEvent("active-leaf-change", restoredLeaf);
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  flushAnimationFrames();
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  eq("Obsidian 晚恢复 source 后仍回到阅读模式", restoredView.getMode(), "preview");
+
+  restoredView._setModeForTest("source");
+  emitWorkspaceEvent("active-leaf-change", restoredLeaf);
+  flushAnimationFrames();
+  await Promise.resolve();
+  eq("同一篇手动切编辑后不被反复弹回", restoredView.getMode(), "source");
+
+  const editedView = makeView("homepage.md");
+  const editedLeaf = makeLeaf(editedView);
+  leaves = [editedLeaf];
+  app.workspace.activeLeaf = editedLeaf;
+  emitWorkspaceEvent("file-open", { path: "homepage.md" });
+  flushAnimationFrames();
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  editedView._setModeForTest("source");
+  for (const callback of documentEvents.get("pointerdown") || []) callback();
+  emitWorkspaceEvent("active-leaf-change", editedLeaf);
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  flushAnimationFrames();
+  eq("到达后立即手动编辑也不会被补做券弹回", editedView.getMode(), "source");
+
+  /* 指定阅读的笔记与首页是独立配置：只改到达的那一格。 */
+  const selectedView = makeView("Reading/essay.md");
+  const selectedLeaf = makeLeaf(selectedView);
+  const siblingView = makeView("inbox.md");
+  const siblingLeaf = makeLeaf(siblingView);
+  leaves = [selectedLeaf, siblingLeaf];
+  app.workspace.activeLeaf = selectedLeaf;
+  app.__activeFile = { path: "Reading/essay.md" };
+  plugin.settings.forcePreview = false;
+  plugin.settings.previewPaths = ["Reading"];
+  emitWorkspaceEvent("file-open", { path: "Reading/essay.md" });
+  flushAnimationFrames();
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  eq("选中文件夹里的笔记在到达时进入阅读模式", selectedView.getMode(), "preview");
+  eq("分屏另一侧未选中的笔记不被改模式", siblingView.getMode(), "source");
+  const duplicateView = makeView("Reading/essay.md");
+  const duplicateLeaf = makeLeaf(duplicateView);
+  leaves = [duplicateLeaf, selectedLeaf, siblingLeaf];
+  selectedView._setModeForTest("source");
+  await plugin.enforcePreview({ path: "Reading/essay.md" });
+  eq("同一笔记在另一分屏中也不被连带切模式", duplicateView.getMode(), "source");
+  eq("只切换当前到达的叶片", selectedView.getMode(), "preview");
+  selectedView._setModeForTest("source");
+  emitWorkspaceEvent("active-leaf-change", selectedLeaf);
+  flushAnimationFrames();
+  await Promise.resolve();
+  eq("选中笔记手动切编辑后不被弹回", selectedView.getMode(), "source");
+
+  emitWorkspaceEvent("file-open", { path: "Reading/essay.md" });
+  flushAnimationFrames();
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  selectedView._setModeForTest("source");
+  emitWorkspaceEvent("active-leaf-change", selectedLeaf);
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  flushAnimationFrames();
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  eq("选中笔记在 Obsidian 晚恢复编辑模式后仍进阅读", selectedView.getMode(), "preview");
+  selectedView._setModeForTest("source");
+
+  plugin.settings.previewPaths = [];
+  emitWorkspaceEvent("file-open", { path: "Reading/essay.md" });
+  flushAnimationFrames();
+  await Promise.resolve();
+  eq("移除指定阅读后不再接管这篇笔记", selectedView.getMode(), "source");
+
+  /* 从真正的主文件提取选择窗口：测试树形选择和写回路径，不复制实现。 */
+  const pickerFrom = src.indexOf("class PreviewPathsModal extends Modal");
+  const pickerTo = src.indexOf("class PaperDeskSettingTab", pickerFrom);
+  ok("阅读范围选择窗口存在", pickerFrom > 0 && pickerTo > pickerFrom);
+  const Picker = new Function("Modal", "CSS_PREFIX",
+    src.slice(pickerFrom, pickerTo) + "\nreturn PreviewPathsModal;")(api.Modal, "pd-");
+  const folder = { path: "Reading", name: "Reading", children: [] };
+  const file = { path: "Reading/essay.md", name: "essay.md", extension: "md" };
+  folder.children.push(file);
+  app.vault.getAllLoadedFiles = () => [folder, file];
+  const picker = new Picker(app, plugin, null);
+  picker.open();
+  const tree = find(picker.contentEl, "pd-preview-tree");
+  eq("选择窗口初始只展开顶层文件夹", tree?.children.length, 1);
+  const folderRow = tree?.children[0];
+  folderRow.children[1].checked = true;
+  await folderRow.children[1].fire("change");
+  const footer = find(picker.contentEl, "pd-preview-picker-footer");
+  await footer.children[2].fire("click");
+  eq("勾选文件夹只保存本插件的路径列表", plugin.settings.previewPaths, ["Reading"]);
+  plugin.settings.previewPaths = [];
 
   /* ============ 5. 12 小时制真的落到界面上 ============ */
 
@@ -586,6 +931,95 @@ globalThis.Date = class extends RealDate {
     !!meridiem24 && text(meridiem24) === "",
     meridiem24 ? `实际："${text(meridiem24)}"` : "(没有标记节点)"
   );
+
+  /* 动态纸条事件放在首页到达测试之后，避免测试用的文件切换影响模式断言。 */
+  app.__files = [
+    { path: "homepage.md", basename: "homepage", extension: "md" },
+    { path: "clutter/some-note.md", basename: "some-note", extension: "md" },
+    { path: "inbox.md", basename: "inbox", extension: "md" },
+  ];
+  app.__lastOpenFiles = ["homepage.md", "clutter/some-note.md"];
+  const liveBrief = renderBlock("home-brief", "继续：{{resume}}\n留意：原样保留");
+  const liveResume = renderBlock("home-resume", "");
+  eq("纸条继续指向最近非首页", find(liveBrief, "pd-brief-resume-link")?.attrs.href, "clutter/some-note.md");
+  app.__lastOpenFiles = ["homepage.md", "inbox.md"];
+  emitWorkspaceEvent("file-open", { path: "homepage.md" });
+  eq("返回首页后继续入口刷新", find(liveBrief, "pd-brief-resume-link")?.attrs.href, "inbox.md");
+  eq("独立继续区块与纸条始终指向同一篇", find(liveResume, "pd-resume-link")?.attrs.href, "inbox.md");
+  app.__openedLinks = [];
+  find(liveBrief, "pd-brief-resume-link")?.onclick?.({ preventDefault() {} });
+  eq("纸条继续入口打开最近笔记", app.__openedLinks, ["inbox.md"]);
+  const longRecentName = "Lecture 04 - Transformation Pipeline and Geometric Transformations";
+  app.__files.push({ path: `YEAR3/${longRecentName}.md`, basename: longRecentName, extension: "md" });
+  app.__lastOpenFiles = ["homepage.md", `YEAR3/${longRecentName}.md`];
+  emitWorkspaceEvent("file-open", { path: "homepage.md" });
+  eq("长标题省略时仍能查看完整笔记名", find(liveBrief, "pd-brief-resume-link")?.attrs.title, longRecentName);
+  app.__lastOpenFiles = ["homepage.md", "deleted.md"];
+  emitWorkspaceEvent("active-leaf-change", null);
+  ok("无有效继续目标时只保留普通行", !find(liveBrief, "pd-brief-resume-link") && text(liveBrief).includes("原样保留"));
+
+  const sourceFile = { path: "folder/note.md", basename: "note", extension: "md" };
+  const otherSameName = { path: "note.md", basename: "note", extension: "md" };
+  app.__files = [sourceFile, otherSameName, ...app.__files];
+  app.__notes = {
+    "folder/note.md": "# Course\n## Summary\n\n第一段 **正文**\n\n第二段不取\n## Next\n别的章节",
+    "note.md": "## Summary\n\n错误的同名笔记",
+  };
+  app.__caches = {
+    "folder/note.md": { headings: [
+      { heading: "Summary", level: 2, position: { start: { line: 1 } } },
+      { heading: "Next", level: 2, position: { start: { line: 5 } } },
+    ] },
+    "note.md": { headings: [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }] },
+  };
+  const excerptEl = renderBlock("home-excerpt", "[[note#Summary]]", "folder/homepage.md");
+  await flushPromises();
+  ok("摘录显示目标标题下首段", text(excerptEl).includes("第一段 **正文**") && !text(excerptEl).includes("第二段不取"));
+  ok("同名笔记按首页位置解析", !text(excerptEl).includes("错误的同名笔记"));
+  eq("摘录可回到原文标题", find(excerptEl, "pd-excerpt-source")?.attrs.href, "folder/note.md#Summary");
+  app.__openedLinks = [];
+  find(excerptEl, "pd-excerpt-source")?.onclick?.({ preventDefault() {} });
+  eq("来源入口打开原文标题", app.__openedLinks, ["folder/note.md#Summary"]);
+  const savedCache = app.__caches["folder/note.md"];
+  app.__caches["folder/note.md"] = null;
+  const uncachedExcerpt = renderBlock("home-excerpt", "[[note#Summary]]", "folder/homepage.md");
+  await flushPromises();
+  ok("标题缓存尚未就绪时仍从有效原文摘录", text(uncachedExcerpt).includes("第一段 **正文**"));
+  uncachedExcerpt?._child?.unload();
+  app.__caches["folder/note.md"] = savedCache;
+  ok("缺标题双链不留空框", !find(renderBlock("home-excerpt", "[[note]]", "folder/homepage.md"), "pd-excerpt"));
+  ok("两条来源不擅自选一条", !find(renderBlock("home-excerpt", "[[note#Summary]]\n[[other#Summary]]", "folder/homepage.md"), "pd-excerpt"));
+  ok("缺失来源不留空框", !find(renderBlock("home-excerpt", "[[missing#Summary]]", "folder/homepage.md"), "pd-excerpt"));
+  const missingHeading = renderBlock("home-excerpt", "[[note#Missing]]", "folder/homepage.md");
+  await flushPromises();
+  ok("缺失标题不显示其他章节", !find(missingHeading, "pd-excerpt"));
+
+  app.__notes["folder/note.md"] = "## Summary\n\n修改后的正文";
+  app.__caches["folder/note.md"].headings = [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }];
+  emitVaultEvent("modify", sourceFile);
+  await flushPromises();
+  ok("来源笔记修改后摘录局部更新", text(excerptEl).includes("修改后的正文"));
+  app.__notes["folder/note.md"] = "# New\n前言\n## Summary\n\n移动标题后的正文";
+  emitVaultEvent("modify", sourceFile); // 模拟正文先更新、标题元数据稍后更新
+  await flushPromises();
+  ok("标题行号缓存尚未更新也不会摘到错误段落", text(excerptEl).includes("移动标题后的正文") && !text(excerptEl).includes("前言"));
+  excerptEl._child?.unload();
+  missingHeading._child?.unload();
+
+  const originalCachedRead = app.vault.cachedRead;
+  const reads = [];
+  app.vault.cachedRead = () => new Promise((resolve) => reads.push(resolve));
+  const racingExcerpt = renderBlock("home-excerpt", "[[note#Summary]]", "folder/homepage.md");
+  emitVaultEvent("modify", sourceFile);
+  eq("快速修改会启动两次独立读取", reads.length, 2);
+  if (reads.length >= 2) {
+    reads[1]("## Summary\n\n新版本");
+    await flushPromises();
+    reads[0]("## Summary\n\n旧版本");
+    await flushPromises();
+  }
+  ok("较旧异步读取不能覆盖新摘录", text(racingExcerpt).includes("新版本") && !text(racingExcerpt).includes("旧版本"));
+  app.vault.cachedRead = originalCachedRead;
 
   globalThis.Date = RealDate;
 

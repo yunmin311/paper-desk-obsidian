@@ -32,7 +32,7 @@ const slice = src.slice(src.indexOf("*/", from) + 2, src.lastIndexOf("/*", to));
 
 const factory = new Function(
   slice +
-    "\nreturn { splitHM, formatDuration, durationFor, advancePhase, msToNextMinute, remainingOf, dayKey, needsDailyReset, nextAutoStart, matchesRule, matchesAny, aliasOf, displayNameFor, parseNoteLines, dayOfYear, pickNoteFor, isHomePath, shouldForcePreview };"
+    "\nreturn { splitHM, formatDuration, durationFor, advancePhase, msToNextMinute, remainingOf, dayKey, needsDailyReset, nextAutoStart, matchesRule, matchesAny, aliasOf, displayNameFor, parseNoteLines, dayOfYear, pickNoteFor, isHomePath, shouldForcePreview, parseExcerptSource: typeof parseExcerptSource === 'function' ? parseExcerptSource : null, firstProseParagraph: typeof firstProseParagraph === 'function' ? firstProseParagraph : null };"
 );
 const L = factory();
 
@@ -331,6 +331,80 @@ eq("在首页上要干预", L.shouldForcePreview(true, "homepage.md", "homepage.
 eq("★ 别的笔记不受影响", L.shouldForcePreview(true, "homepage.md", "其他笔记.md"), false);
 eq("首页路径带空格也能认", L.shouldForcePreview(true, "  homepage.md  ", "homepage.md"), true);
 eq("子目录下的同名文件不算首页", L.shouldForcePreview(true, "homepage.md", "子目录/homepage.md"), false);
+eq("选中的单篇笔记到达时进入阅读模式", L.shouldForcePreview(false, "homepage.md", "Reading/essay.md", ["Reading/essay.md"]), true);
+eq("选中文件夹覆盖其内部笔记", L.shouldForcePreview(false, "homepage.md", "Reading/notes/essay.md", ["Reading"]), true);
+eq("文件夹名相似不误命中", L.shouldForcePreview(false, "homepage.md", "Reading 2/essay.md", ["Reading"]), false);
+eq("未选中的笔记仍按原模式打开", L.shouldForcePreview(true, "homepage.md", "inbox.md", ["Reading"]), false);
+eq("选项为空时首页关闭就不切换任何笔记", L.shouldForcePreview(false, "homepage.md", "homepage.md", []), false);
+
+/* ---------------- 指定标题摘录 ---------------- */
+eq("只解析单条带标题的双链", L.parseExcerptSource?.("[[folder/note#Summary]]"), {
+  linkpath: "folder/note", heading: "Summary",
+});
+eq("缺少标题不猜测摘录来源", L.parseExcerptSource?.("[[folder/note]]"), null);
+eq("多条来源不生成摘录", L.parseExcerptSource?.("[[folder/note#Summary]]\n[[other#Summary]]"), null);
+const excerptLines = [
+  "# Course", "## Summary", "", "```js", "console.log('x')", "```", "",
+  "- a list", "", "| A | B |", "| --- | --- |", "| 1 | 2 |", "",
+  "这一段 **正文**", "继续句。", "", "第二段不取", "## Next", "也不能取",
+];
+eq("跳过代码列表表格后取第一段正文", L.firstProseParagraph?.(
+  excerptLines.join("\n"),
+  [
+    { heading: "Summary", level: 2, position: { start: { line: 1 } } },
+    { heading: "Next", level: 2, position: { start: { line: 17 } } },
+  ],
+  "Summary"
+), "这一段 **正文**\n继续句。");
+eq("标题不存在时不展示其他章节", L.firstProseParagraph?.(excerptLines.join("\n"), [], "Missing"), "");
+eq("列表续行不能冒充正文", L.firstProseParagraph?.(
+  "## Summary\n- 列表项\n  列表续行\n\n真正正文",
+  [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }],
+  "Summary"
+), "真正正文");
+eq("缩进代码不能冒充摘录正文", L.firstProseParagraph?.(
+  "## Summary\n\n    const answer = 42;\n\n真正正文",
+  [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }],
+  "Summary"
+), "真正正文");
+eq("不以竖线开头的表格不能冒充正文", L.firstProseParagraph?.(
+  "## Summary\n\nName | Role\n--- | ---\nPaper | Desk\n\n真正正文",
+  [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }],
+  "Summary"
+), "真正正文");
+eq("下一标题缓存行号过期不越界摘录", L.firstProseParagraph?.(
+  "## Summary\n\n- 列表\n\n## Next\n别的章节正文",
+  [
+    { heading: "Summary", level: 2, position: { start: { line: 0 } } },
+    { heading: "Next", level: 2, position: { start: { line: 8 } } },
+  ],
+  "Summary"
+), "");
+eq("Obsidian 识别的 Setext 标题也能摘录", L.firstProseParagraph?.(
+  "Summary\n-------\n\nSetext 正文",
+  [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }],
+  "Summary"
+), "Setext 正文");
+eq("标题改名后旧缓存不能摘录新标题正文", L.firstProseParagraph?.(
+  "## Renamed\n\nWrong target",
+  [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }],
+  "Summary"
+), "");
+eq("四反引号代码块内的三反引号不能提前结束围栏", L.firstProseParagraph?.(
+  "## Summary\n\n````js\n```\nSECRET\n````\n\nVisible paragraph",
+  [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }],
+  "Summary"
+), "Visible paragraph");
+eq("四反引号代码块内的假标题不能截断章节", L.firstProseParagraph?.(
+  "## Summary\n\n````md\n```\n## Fake heading\n````\n\nVisible paragraph",
+  [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }],
+  "Summary"
+), "Visible paragraph");
+eq("格式化标题由新正文与缓存共同确认", L.firstProseParagraph?.(
+  "## **Summary**\n\nFormatted title paragraph",
+  [{ heading: "Summary", level: 2, position: { start: { line: 0 } } }],
+  "Summary"
+), "Formatted title paragraph");
 
 /* ---------------- 结果 ---------------- */
 if (fails.length) {
