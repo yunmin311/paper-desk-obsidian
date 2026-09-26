@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-09-26
 
 - Kept long live-resume titles to one desk-note line, with the full name available on hover.
   Homepage action outlines now stay unfilled and use a more legible two-column layout;
